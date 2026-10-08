@@ -1,0 +1,302 @@
+export const translations = {
+  ar: {
+    appTitle: "نظام إدارة وتدقيق الأصول الصناعية",
+    terminalId: "المحطة الميدانية",
+    scannerStatus: "ماسح الباركود البصري",
+    ready: "جاهز للالتقاط",
+    active: "قيد المسح",
+    online: "متصل بالسحابة",
+    offline: "وضع غير متصل (محلي)",
+    battery: "البطارية",
+    soundOn: "الصوت مفعل",
+    soundOff: "صامت",
+    
+    // Screens
+    screenCockpit: "منصة التوفيق والتدقيق",
+    screenScanner: "الماسح الميداني الذكي",
+    screenOfflineQueue: "رتل المزامنة غير المتصلة",
+    screenWarehouseMap: "خريطة المستودع والرفوف",
+    screenReports: "تقارير الإقفال والاعتماد",
+
+    // Queue Strip
+    queueBannerTitle: "رتل المعاملات غير المتصلة (محلي)",
+    pendingMutations: "عمليات معلقة بانتظار المزامنة",
+    flushQueue: "مزامنة الرتل الآن",
+    storageHealth: "حالة الذاكرة التخزينية",
+    simulateNetwork: "محاكاة الاتصال",
+    networkOnline: "متصل بالشبكة",
+    networkOffline: "مفصول عن الشبكة",
+    cacheSize: "ذاكرة التخزين المؤقت",
+
+    // Cockpit
+    auditSession: "جلسة التدقيق النشطة",
+    auditor: "المدقق الفني",
+    zone: "المنطقة الصناعية",
+    progress: "معدل الإنجاز",
+    totalAssets: "إجمالي الأصول",
+    reconciled: "أصول مطابقة",
+    discrepancies: "فروقات وملاحظات",
+    missing: "أصول مفقودة",
+    unscanned: "بانتظار المسح",
+    scanVelocity: "سرعة المسح",
+    assetsPerMin: "أصل / دقيقة",
+
+    // Search and Filters
+    searchPlaceholder: "مسح باركود، رقم تسلسلي، أو رمز الأصل (اضغط Enter)...",
+    filterAll: "الكل",
+    filterReconciled: "المطابقة",
+    filterDiscrepancy: "الفروقات",
+    filterMissing: "المفقودة",
+    filterUnscanned: "غير الممسوحة",
+    quickScanDemo: "محاكاة مسح باركود سريع",
+    addNewAsset: "إضافة أصل جديد",
+
+    // Grid Columns
+    colAssetTag: "رمز الأصل",
+    colDescription: "الوصف والتصنيف",
+    colSerial: "الرقم التسلسلي",
+    colBarcode: "الباركود",
+    colLocation: "إحداثيات الرف",
+    colCondition: "الحالة التشغيلية",
+    colStatus: "حالة التدقيق",
+    colLastScan: "آخر مسح",
+    colActions: "الإجراءات",
+
+    // Conditions
+    condNominal: "سليم / قياسي",
+    condMinorWear: "استهلاك طفيف",
+    condNeedsRepair: "يحتاج صيانة",
+    condDamaged: "تالف",
+    condUninspected: "غير مفحوص",
+
+    // Statuses
+    statReconciled: "مطابق وموثق",
+    statDiscrepancy: "محل مراجعة",
+    statMissing: "مفقود",
+    statUnscanned: "لم يُفحص",
+    statStaging: "قيد التحضير",
+
+    // Actions
+    btnVerify: "تأكيد المطابقة",
+    btnFlagDiscrepancy: "تسجيل فرق",
+    btnMarkMissing: "تسجيل كمفقود",
+    btnInspect: "فحص التفاصيل",
+    btnSaveNotes: "حفظ الملاحظات",
+    btnClose: "إغلاق",
+
+    // Asset Inspector Drawer
+    inspectorTitle: "مفتش الأصول والبيانات الفنية",
+    specsAndTelemetry: "المواصفات والبيانات الهندسية",
+    physicalChecklist: "قائمة التحقق المادي",
+    chkSerialMatch: "تطابق الرقم التسلسلي الفيزيائي",
+    chkRfidDetected: "استجابة شريحة RFID اللاسلكية",
+    chkTamperSeal: "سلامة ختم الحماية ومنع العبث",
+    weight: "الوزن المقدر",
+    calibrationDue: "تاريخ انتهاء المعايرة",
+    changeCondition: "تحديث الحالة الفيزيائية",
+    changeStatus: "تحديث حالة التوفيق",
+    inspectorNotes: "ملاحظات الفحص الميداني",
+
+    // Scanner Terminal Screen
+    scannerTitle: "محطة المسح الميداني الوعرة (Handheld Rugged Terminal)",
+    scannerSubtitle: "كاميرا المسح البصري المباشرة وقارئ الباركود عالي التردد",
+    reticleAlignPrompt: "وجّه عدسة الماسح نحو الباركود أو رمز QR",
+    laserBeamActive: "شعاع الليزر نشط",
+    flashTorch: "إضاءة الفلاش",
+    manualEntry: "إدخال يدوي للباركود",
+    rapidSweep: "جولة مسح تلقائي سريعة",
+    recentScans: "سجل المسح الأخير",
+    scannedItemCard: "بيانات الأصل الملتقط",
+    commitScan: "اعتماد وحفظ المسح",
+    nextScan: "المسح التالي",
+
+    // Offline & Conflict Screen
+    conflictTitle: "مستودع المزامنة السحابية وفض النزاعات",
+    conflictSubtitle: "إدارة التعديلات الميدانية المعزولة وحل التباينات مع الخادم السحابي",
+    pendingMutationsHeader: "المعاملات المحلية غير المرسلة",
+    conflictsDetected: "نزاعات تحتاج تدخلاً بشرياً",
+    localRecord: "النسخة الميدانية (الجهاز الحالي)",
+    cloudRecord: "نسخة الخادم السحابي",
+    acceptLocal: "اعتماد النسخة الميدانية",
+    acceptCloud: "اعتماد نسخة الخادم",
+    mergeBoth: "دمج وتأكيد الملاحظة",
+    noPendingMutations: "لا توجد معاملات معلقة، جميع البيانات متزامنة محلياً وسحابياً.",
+    noConflicts: "لا توجد تباينات أو نزاعات برمجية مسجلة حالياً.",
+
+    // Warehouse Map
+    mapTitle: "الخارطة المكانية لمستودع التخزين والأرفف",
+    mapSubtitle: "تتبع تقدم الجرد ومواقع الأصول عبر الممرات (Aisles) والخلجان (Bays)",
+    selectBayToView: "اختر خليجاً أو رفاً لاستعراض محتوياته الميدانية",
+    aisle: "الممر",
+    bay: "الخليج",
+    shelfLevel: "مستوى الرف",
+    completionRate: "نسبة التدقيق",
+    assetsInBay: "أصول مسجلة في هذا الموقع",
+
+    // Reports Screen
+    reportsTitle: "بيان المطابقة والتقرير النهائي للتدقيق",
+    reportsSubtitle: "استخراج تقارير التوفيق الصناعي والاعتماد الرقمي",
+    executiveSummary: "الملخص التنفيذي للجلسة",
+    reconciliationAccuracy: "دقة المطابقة الإجمالية",
+    criticalIssues: "أصول تتطلب إجراءً فورياً",
+    exportCsv: "تصدير بصيغة CSV",
+    exportJson: "تصدير بصيغة JSON",
+    printReport: "طباعة البيان الفني",
+    digitalSignature: "التوقيع والاعتماد الرقمي",
+    signAuditor: "توقيع رئيس فريق التدقيق الفني",
+    signController: "توقيع مراقب العمليات والمنشأة",
+    clearSign: "مسح التوقيع",
+    commitSignOff: "إقفال واعتماد محضر الجرد",
+    signedSuccess: "تم اعتماد الجلسة وتوثيق التوقيع الرقمي بنجاح!"
+  },
+  en: {
+    appTitle: "Precision Industrial Asset Cockpit",
+    terminalId: "FIELD TERMINAL",
+    scannerStatus: "OPTICAL SCANNER",
+    ready: "READY",
+    active: "SCANNING",
+    online: "CLOUD ONLINE",
+    offline: "OFFLINE (LOCAL CACHE)",
+    battery: "BATTERY",
+    soundOn: "AUDIO ON",
+    soundOff: "MUTED",
+
+    // Screens
+    screenCockpit: "Reconciliation Cockpit",
+    screenScanner: "Field Scanner Terminal",
+    screenOfflineQueue: "Offline Sync Queue",
+    screenWarehouseMap: "Warehouse Bay Map",
+    screenReports: "Audit Manifest & Sign-off",
+
+    // Queue Strip
+    queueBannerTitle: "OFFLINE TRANSACTION QUEUE (LOCAL CACHE)",
+    pendingMutations: "pending mutations queued",
+    flushQueue: "Flush Queue Now",
+    storageHealth: "Storage Health",
+    simulateNetwork: "Network Simulation",
+    networkOnline: "Online",
+    networkOffline: "Offline",
+    cacheSize: "IndexedDB Cache",
+
+    // Cockpit
+    auditSession: "Active Audit Session",
+    auditor: "Lead Auditor",
+    zone: "Operational Zone",
+    progress: "Audit Progress",
+    totalAssets: "Total Assets",
+    reconciled: "Reconciled",
+    discrepancies: "Discrepancies",
+    missing: "Missing Assets",
+    unscanned: "Pending Scan",
+    scanVelocity: "Scan Velocity",
+    assetsPerMin: "assets/min",
+
+    // Search and Filters
+    searchPlaceholder: "Scan barcode, serial number, or asset tag (Press Enter)...",
+    filterAll: "All",
+    filterReconciled: "Reconciled",
+    filterDiscrepancy: "Discrepancy",
+    filterMissing: "Missing",
+    filterUnscanned: "Unscanned",
+    quickScanDemo: "Trigger Test Scan",
+    addNewAsset: "Add Asset Tag",
+
+    // Grid Columns
+    colAssetTag: "Asset Tag",
+    colDescription: "Description & Category",
+    colSerial: "Serial Number",
+    colBarcode: "Barcode",
+    colLocation: "Bay Location",
+    colCondition: "Condition",
+    colStatus: "Status",
+    colLastScan: "Last Scanned",
+    colActions: "Actions",
+
+    // Conditions
+    condNominal: "Nominal",
+    condMinorWear: "Minor Wear",
+    condNeedsRepair: "Needs Repair",
+    condDamaged: "Damaged",
+    condUninspected: "Uninspected",
+
+    // Statuses
+    statReconciled: "Reconciled",
+    statDiscrepancy: "Discrepancy",
+    statMissing: "Missing",
+    statUnscanned: "Unscanned",
+    statStaging: "Staging",
+
+    // Actions
+    btnVerify: "Reconcile",
+    btnFlagDiscrepancy: "Flag Issue",
+    btnMarkMissing: "Mark Missing",
+    btnInspect: "Inspect",
+    btnSaveNotes: "Save Notes",
+    btnClose: "Close",
+
+    // Asset Inspector Drawer
+    inspectorTitle: "Asset Diagnostic & Inspection Sheet",
+    specsAndTelemetry: "Engineering Specifications",
+    physicalChecklist: "Physical Verification Checklist",
+    chkSerialMatch: "Serial Number Physical Match",
+    chkRfidDetected: "RFID Transponder Verified",
+    chkTamperSeal: "Tamper Seal Intact",
+    weight: "Weight",
+    calibrationDue: "Calibration Due",
+    changeCondition: "Physical Condition Grade",
+    changeStatus: "Audit Status Override",
+    inspectorNotes: "Field Inspector Notes",
+
+    // Scanner Terminal Screen
+    scannerTitle: "Rugged Field Scanner Terminal",
+    scannerSubtitle: "High-cadence optical barcode viewfinder and hardware telemetry",
+    reticleAlignPrompt: "Align laser reticle with barcode or QR matrix",
+    laserBeamActive: "LASER EMITTER ACTIVE",
+    flashTorch: "Illumination Torch",
+    manualEntry: "Manual Input",
+    rapidSweep: "Run Rapid Auto-Sweep",
+    recentScans: "Recent Scan Buffer",
+    scannedItemCard: "Scanned Target telemetry",
+    commitScan: "Commit & Reconcile",
+    nextScan: "Next Scan",
+
+    // Offline & Conflict Screen
+    conflictTitle: "Offline Sync Engine & Conflict Resolution",
+    conflictSubtitle: "Manage partitioned mutations, verify local delta payloads, and resolve cloud divergence",
+    pendingMutationsHeader: "Uncommitted Local Transaction Queue",
+    conflictsDetected: "Partition Conflicts Requiring Resolution",
+    localRecord: "Local Field Version (This Terminal)",
+    cloudRecord: "Cloud Master Record",
+    acceptLocal: "Accept Local Version",
+    acceptCloud: "Accept Cloud Version",
+    mergeBoth: "Merge with Annotation",
+    noPendingMutations: "Queue is empty. All local mutations have synced to cloud storage.",
+    noConflicts: "Zero active schema or state conflicts detected.",
+
+    // Warehouse Map
+    mapTitle: "Warehouse Spatial Bay & Rack Grid",
+    mapSubtitle: "Monitor physical audit saturation across warehouse aisles and storage racks",
+    selectBayToView: "Select a bay or rack coordinate to inspect assets",
+    aisle: "Aisle",
+    bay: "Bay",
+    shelfLevel: "Shelf Level",
+    completionRate: "Completion Rate",
+    assetsInBay: "Physical Assets in Bay",
+
+    // Reports Screen
+    reportsTitle: "Audit Reconciliation Manifest & Digital Certification",
+    reportsSubtitle: "Export calibrated audit ledger and sign-off verification report",
+    executiveSummary: "Executive Audit Summary",
+    reconciliationAccuracy: "Audit Accuracy Index",
+    criticalIssues: "Critical Exceptions Requiring Escalation",
+    exportCsv: "Export CSV Ledger",
+    exportJson: "Export JSON Schema",
+    printReport: "Print Industrial Manifest",
+    digitalSignature: "Digital Sign-off & Certification",
+    signAuditor: "Lead Field Auditor Signature",
+    signController: "Plant Operations Controller Signature",
+    clearSign: "Clear",
+    commitSignOff: "Certify & Lock Audit Ledger",
+    signedSuccess: "Audit cycle successfully certified and locked with cryptographic timestamp!"
+  }
+};
