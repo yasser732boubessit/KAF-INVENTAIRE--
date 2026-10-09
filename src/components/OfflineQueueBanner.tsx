@@ -72,7 +72,7 @@ export const OfflineQueueBanner: React.FC<OfflineQueueBannerProps> = ({
         <button
           onClick={onOpenQueueScreen}
           className="flex items-center gap-1 bg-[#2D266E] hover:bg-[#39308B] text-violet-200 px-2.5 py-1.5 rounded border border-[#3E358E] transition-colors"
-          title="عرض تفاصيل رتل المزامنة وفض النزاعات"
+          title={lang === 'fr' ? "Voir les détails de la file et les conflits" : lang === 'ar' ? "عرض تفاصيل رتل المزامنة وفض النزاعات" : "View queue details & conflicts"}
         >
           <span>{t.screenOfflineQueue}</span>
           <ArrowRight className={`w-3 h-3 ${lang === 'ar' ? 'rotate-180' : ''}`} />

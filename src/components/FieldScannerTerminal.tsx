@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Scan, 
   Zap, 
   Lightbulb, 
   CheckCircle2, 
-  AlertTriangle, 
-  XCircle, 
   RotateCw, 
-  Camera, 
   History, 
   Barcode, 
-  Radio, 
-  Layers,
-  MapPin,
-  ChevronRight,
-  ShieldCheck,
-  Check
+  Check,
+  Camera,
+  CameraOff,
+  AlertTriangle,
+  Plus
 } from 'lucide-react';
 import { Asset, AssetCondition, Language } from '../types';
 import { translations } from '../translations';
@@ -23,13 +18,19 @@ import { sound } from '../utils/audio';
 
 interface FieldScannerTerminalProps {
   assets: Asset[];
-  onReconcileAsset: (assetId: string, condition?: AssetCondition) => void;
+  currentScanningBay: string;
+  onSetScanningBay: (bay: string) => void;
+  onReconcileAsset: (assetId: string, foundBay: string, condition?: AssetCondition) => void;
+  onOpenDiscoveryModalWithCode?: (code: string) => void;
   lang: Language;
 }
 
 export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   assets,
+  currentScanningBay,
+  onSetScanningBay,
   onReconcileAsset,
+  onOpenDiscoveryModalWithCode,
   lang
 }) => {
   const t = translations[lang];
@@ -41,6 +42,43 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   const [recentScans, setRecentScans] = useState<Asset[]>(assets.slice(0, 3));
   const [autoSweepRunning, setAutoSweepRunning] = useState(false);
   const [scanLaserColor, setScanLaserColor] = useState<'red' | 'green'>('red');
+  
+  // Real Camera Feed Support
+  const [useRealCamera, setUseRealCamera] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [cameraError, setCameraError] = useState('');
+
+  // Unknown barcode detection popup
+  const [unknownCodePrompt, setUnknownCodePrompt] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    if (useRealCamera) {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          .then((s) => {
+            stream = s;
+            if (videoRef.current) {
+              videoRef.current.srcObject = s;
+              videoRef.current.play();
+            }
+          })
+          .catch((err) => {
+            setCameraError(
+              lang === 'fr' 
+                ? "Caméra non accessible ou permissions requises. Utilisation du mode optique simulé." 
+                : "تعذر الوصول إلى الكاميرا. تم تفعيل المحاكي البصري الميداني."
+            );
+            setUseRealCamera(false);
+          });
+      }
+    }
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [useRealCamera, lang]);
 
   // Trigger barcode scan for a target asset
   const triggerScanOnAsset = (target: Asset) => {
@@ -49,7 +87,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
     setTimeout(() => setScanLaserColor('red'), 600);
 
     setActiveAsset(target);
-    onReconcileAsset(target.id);
+    onReconcileAsset(target.id, currentScanningBay);
 
     setRecentScans(prev => {
       const filtered = prev.filter(a => a.id !== target.id);
@@ -62,7 +100,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
     if (autoSweepRunning) return;
     setAutoSweepRunning(true);
     let index = 0;
-    const sweepCandidates = assets.filter(a => a.status !== 'reconciled');
+    const sweepCandidates = assets.filter(a => a.inventoryStatus !== 'CONFORME');
     const itemsToSweep = sweepCandidates.length > 0 ? sweepCandidates : assets;
 
     const interval = setInterval(() => {
@@ -90,9 +128,18 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
     if (match) {
       triggerScanOnAsset(match);
       setManualCode('');
+      setUnknownCodePrompt(null);
     } else {
       sound.playAlert();
+      // Trigger user requirement 3: Unknown asset -> Non Enregistré discovery prompt!
+      setUnknownCodePrompt(manualCode.trim());
     }
+  };
+
+  const getDisplayName = (item: Asset) => {
+    if (lang === 'fr') return item.nameFr || item.name;
+    if (lang === 'ar') return item.nameAr;
+    return item.name;
   };
 
   return (
@@ -100,7 +147,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
       {/* Handheld Viewfinder Viewport (Left/Top) */}
       <div className="flex-1 p-4 lg:p-6 flex flex-col justify-between max-w-3xl mx-auto w-full">
         {/* Terminal Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
           <div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -112,6 +159,20 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Real Camera (Webcam) Toggle */}
+            <button
+              onClick={() => setUseRealCamera(!useRealCamera)}
+              className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                useRealCamera 
+                  ? 'bg-sky-600 border-sky-400 text-white shadow-lg shadow-sky-500/20' 
+                  : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+              }`}
+            >
+              {useRealCamera ? <CameraOff className="w-3.5 h-3.5" /> : <Camera className="w-3.5 h-3.5 text-sky-400" />}
+              <span>{useRealCamera ? "Désactiver Caméra" : t.useWebcamToggle}</span>
+            </button>
+
+            {/* Torch toggle */}
             <button
               onClick={() => setTorchActive(!torchActive)}
               className={`p-2 rounded border transition-colors ${
@@ -123,30 +184,55 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             >
               <Lightbulb className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => setIsScanning(!isScanning)}
-              className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-mono-numbers text-sky-300 hover:text-white"
-            >
-              ENGINE: {isScanning ? 'ACTIVE' : 'STANDBY'}
-            </button>
+
+            {/* Current Auditing Location Selector */}
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs font-mono-numbers">
+              <span className="text-slate-400">BAIE TERRAIN:</span>
+              <select
+                value={currentScanningBay}
+                onChange={(e) => onSetScanningBay(e.target.value)}
+                className="bg-slate-800 text-sky-300 font-bold border-none outline-none rounded px-1"
+              >
+                <option value="BAY-01">BAY-01</option>
+                <option value="BAY-02">BAY-02</option>
+                <option value="BAY-03">BAY-03</option>
+                <option value="BAY-04">BAY-04</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Optical Scanning Reticle & Camera Emulation */}
+        {cameraError && (
+          <div className="my-2 p-2 bg-rose-950/80 border border-rose-800 text-rose-300 text-xs rounded">
+            {cameraError}
+          </div>
+        )}
+
+        {/* Optical Scanning Reticle & Camera Emulation / Live Stream */}
         <div className="relative my-4 aspect-video sm:aspect-[16/10] bg-slate-950 rounded-lg border-2 border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group">
-          {/* Torch simulation illumination */}
-          {torchActive && (
-            <div className="absolute inset-0 bg-radial from-amber-100/10 via-transparent to-transparent pointer-events-none" />
+          {useRealCamera ? (
+            <video
+              ref={videoRef}
+              className="absolute inset-0 w-full h-full object-cover"
+              playsInline
+              muted
+            />
+          ) : (
+            torchActive && (
+              <div className="absolute inset-0 bg-radial from-amber-100/10 via-transparent to-transparent pointer-events-none" />
+            )
           )}
 
           {/* Background Optical Grid */}
-          <div 
-            className="absolute inset-0 opacity-15"
-            style={{
-              backgroundImage: 'radial-gradient(circle, #0284c7 1px, transparent 1px)',
-              backgroundSize: '24px 24px'
-            }}
-          />
+          {!useRealCamera && (
+            <div 
+              className="absolute inset-0 opacity-15"
+              style={{
+                backgroundImage: 'radial-gradient(circle, #0284c7 1px, transparent 1px)',
+                backgroundSize: '24px 24px'
+              }}
+            />
+          )}
 
           {/* Live Laser Sweep Line */}
           {isScanning && (
@@ -160,25 +246,23 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           )}
 
           {/* Industrial Viewfinder Crosshairs & Reticle */}
-          <div className="absolute inset-10 sm:inset-16 border border-sky-500/40 rounded flex flex-col justify-between p-3 pointer-events-none">
-            {/* 4 Corner Markers */}
+          <div className="absolute inset-10 sm:inset-16 border border-sky-500/40 rounded flex flex-col justify-between p-3 pointer-events-none z-10">
             <div className="flex justify-between">
               <span className="w-4 h-4 border-t-2 border-s-2 border-sky-400" />
               <span className="w-4 h-4 border-t-2 border-e-2 border-sky-400" />
             </div>
             
-            {/* Center Target Box */}
             <div className="self-center flex flex-col items-center gap-2">
               <div className="w-48 sm:w-64 h-24 border border-dashed border-sky-400/60 rounded flex items-center justify-center bg-sky-950/20 backdrop-blur-[1px]">
                 <div className="text-center">
                   <Barcode className="w-8 h-8 text-sky-400/80 mx-auto animate-pulse" />
                   <span className="text-[10px] font-mono-numbers text-sky-300 uppercase tracking-widest block mt-1">
-                    {t.laserBeamActive}
+                    {useRealCamera ? t.webcamActive : t.laserBeamActive}
                   </span>
                 </div>
               </div>
               <span className="text-[11px] text-slate-400 bg-black/60 px-2.5 py-0.5 rounded font-mono-numbers">
-                {t.reticleAlignPrompt}
+                {lang === 'fr' ? 'ALIGNER LE CODE DANS LE VISEUR' : lang === 'ar' ? 'قم بمحاذاة الرمز داخل المؤشر' : 'ALIGN TARGET INSIDE RETICLE'}
               </span>
             </div>
 
@@ -191,7 +275,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           {/* Quick Trigger Button overlay */}
           <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center z-20">
             <div className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded text-[11px] font-mono-numbers text-emerald-400 border border-emerald-900/60">
-              FRAME CADENCE: 60 FPS | 1080p INDUSTRIAL SENSOR
+              {useRealCamera ? "LIVE WEBCAM SENSOR ACTIVE" : "OPTICAL SIMULATOR: 60 FPS"}
             </div>
 
             <button
@@ -202,10 +286,36 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               className="bg-[#0284C7] hover:bg-[#0369a1] text-white px-4 py-2 rounded font-bold text-xs shadow-lg flex items-center gap-1.5 active:scale-95 transition-all border border-sky-400/40"
             >
               <Zap className="w-4 h-4 fill-current" />
-              <span>قراءة الهدف الحالي</span>
+              <span>{lang === 'fr' ? "Déclencher Scan In Situ" : "مسح الأصل الحالي"}</span>
             </button>
           </div>
         </div>
+
+        {/* Unknown Code Banner Alert (Scenario 3 from user prompt!) */}
+        {unknownCodePrompt && (
+          <div className="my-2 p-3 bg-amber-950/90 border-2 border-amber-500 rounded-lg flex items-center justify-between text-xs text-amber-200">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+              <div>
+                <strong>Code Inconnu dans le Répertoire ERP ({unknownCodePrompt}) :</strong>
+                <p className="text-[11px] text-amber-300">
+                  Cet équipement a été trouvé physiquement mais n'existe pas dans le système. Enregistrez-le dans la liste des <strong>Actifs Non Enregistrés</strong>.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (onOpenDiscoveryModalWithCode) {
+                  onOpenDiscoveryModalWithCode(unknownCodePrompt);
+                }
+              }}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-bold text-xs flex items-center gap-1 flex-shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Créer Fiche Découverte</span>
+            </button>
+          </div>
+        )}
 
         {/* Field Controls Bar: Rapid sweep + Manual Barcode entry */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
@@ -213,7 +323,11 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           <div className="bg-[#131E3D] p-3 rounded border border-slate-800 flex items-center justify-between">
             <div>
               <div className="text-xs font-bold text-slate-200">{t.rapidSweep}</div>
-              <div className="text-[11px] text-slate-400">مسح متسلسل عالي السرعة (5 أصول متتالية)</div>
+              <div className="text-[11px] text-slate-400">
+                {lang === 'fr' 
+                  ? "Tournée séquentielle haute cadence (5 actifs consécutifs)" 
+                  : "مسح متسلسل عالي السرعة (5 أصول متتالية)"}
+              </div>
             </div>
             <button
               onClick={handleAutoSweep}
@@ -225,7 +339,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               }`}
             >
               <RotateCw className={`w-3.5 h-3.5 ${autoSweepRunning ? 'animate-spin' : ''}`} />
-              <span>{autoSweepRunning ? 'جاري المسح...' : 'بدء الجولة'}</span>
+              <span>{autoSweepRunning ? "Numérisation..." : "Lancer Tournée"}</span>
             </button>
           </div>
 
@@ -235,14 +349,14 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="إدخال كود يدوي (e.g. 894102938104)..."
+              placeholder="Code-barres ou N° série (ex: 894102938104)..."
               className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono-numbers focus:outline-none focus:ring-1 focus:ring-sky-500"
             />
             <button
               type="submit"
               className="bg-slate-800 hover:bg-slate-700 text-sky-400 px-3 py-1 rounded text-xs font-bold border border-slate-700"
             >
-              تحقق
+              Tester
             </button>
           </form>
         </div>
@@ -255,28 +369,34 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {recentScans.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveAsset(item)}
-                className={`p-2 rounded text-start border transition-all text-xs ${
-                  activeAsset?.id === item.id
-                    ? 'bg-sky-950/70 border-sky-500 text-white'
-                    : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850'
-                }`}
-              >
-                <div className="flex justify-between items-center font-mono-numbers text-[10px]">
-                  <span className="text-sky-300 font-bold">{item.id}</span>
-                  <span className="text-emerald-400">OK</span>
-                </div>
-                <div className="font-semibold truncate text-[11px] mt-0.5">
-                  {lang === 'ar' ? item.nameAr : item.name}
-                </div>
-                <div className="text-[10px] text-slate-500 font-mono-numbers mt-0.5">
-                  {item.bayLocation}
-                </div>
-              </button>
-            ))}
+            {recentScans.map(item => {
+              const isLocationDiff = item.inventoryStatus === 'ECART_LOCALISATION';
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveAsset(item)}
+                  className={`p-2 rounded text-start border transition-all text-xs ${
+                    activeAsset?.id === item.id
+                      ? 'bg-sky-950/70 border-sky-500 text-white'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850'
+                  }`}
+                >
+                  <div className="flex justify-between items-center font-mono-numbers text-[10px]">
+                    <span className="text-sky-300 font-bold">{item.id}</span>
+                    <span className={isLocationDiff ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
+                      {isLocationDiff ? "ÉCART LIEU" : "CONFORME"}
+                    </span>
+                  </div>
+                  <div className="font-semibold truncate text-[11px] mt-0.5">
+                    {getDisplayName(item)}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono-numbers mt-0.5">
+                    {item.expectedBayLocation}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -300,25 +420,32 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               <div className="h-40 w-full relative">
                 <img
                   src={activeAsset.imageUrl}
-                  alt={activeAsset.name}
+                  alt={getDisplayName(activeAsset)}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                 <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end text-xs">
                   <span className="bg-black/80 px-2 py-0.5 rounded font-mono-numbers text-sky-300 border border-slate-700">
-                    {activeAsset.bayLocation}
+                    PRÉVU: {activeAsset.expectedBayLocation}
                   </span>
-                  <span className="bg-emerald-900/90 text-emerald-300 px-2 py-0.5 rounded font-bold border border-emerald-600">
-                    MATCH CONFIRMED
-                  </span>
+                  
+                  {activeAsset.inventoryStatus === 'ECART_LOCALISATION' ? (
+                    <span className="bg-amber-900/90 text-amber-300 px-2 py-0.5 rounded font-bold border border-amber-600">
+                      ÉCART LIEU ({activeAsset.scannedBayLocation})
+                    </span>
+                  ) : (
+                    <span className="bg-emerald-900/90 text-emerald-300 px-2 py-0.5 rounded font-bold border border-emerald-600">
+                      CONFORME IN SITU
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="p-3">
                 <h3 className="font-bold text-sm text-white leading-tight">
-                  {lang === 'ar' ? activeAsset.nameAr : activeAsset.name}
+                  {getDisplayName(activeAsset)}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  {activeAsset.category} &bull; {activeAsset.sku}
+                  {activeAsset.category} &bull; {activeAsset.officialCode}
                 </p>
               </div>
             </div>
@@ -326,56 +453,37 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             {/* Telemetry Matrix */}
             <div className="grid grid-cols-2 gap-2 text-xs font-mono-numbers">
               <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
-                <span className="text-slate-500 text-[10px] block font-sans">الباركود البصري:</span>
+                <span className="text-slate-500 text-[10px] block font-sans">Code-Barres:</span>
                 <span className="font-bold text-sky-300">{activeAsset.barcode}</span>
               </div>
               <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
-                <span className="text-slate-500 text-[10px] block font-sans">الرقم التسلسلي:</span>
+                <span className="text-slate-500 text-[10px] block font-sans">N° de Série:</span>
                 <span className="font-bold text-slate-200">{activeAsset.serialNumber}</span>
               </div>
               <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
-                <span className="text-slate-500 text-[10px] block font-sans">معرف RFID:</span>
+                <span className="text-slate-500 text-[10px] block font-sans">Identifiant RFID:</span>
                 <span className="font-bold text-indigo-300">{activeAsset.rfidTag}</span>
               </div>
               <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
-                <span className="text-slate-500 text-[10px] block font-sans">الوزن والمعايرة:</span>
+                <span className="text-slate-500 text-[10px] block font-sans">Masse:</span>
                 <span className="font-bold text-amber-300">{activeAsset.weightKg} KG</span>
               </div>
             </div>
 
-            {/* Physical Check Indicators */}
-            <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 text-xs">
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                {t.physicalChecklist}
+            {/* Location Check Alert if Mismatched */}
+            {activeAsset.expectedBayLocation && !activeAsset.expectedBayLocation.startsWith(currentScanningBay) && (
+              <div className="p-2.5 bg-amber-950/70 border border-amber-600 rounded text-xs text-amber-200">
+                <strong className="block mb-0.5">Alerte Écart d'Emplacement :</strong>
+                L'actif est attendu en <strong>{activeAsset.expectedBayLocation}</strong> mais est scanné dans la zone courante <strong>{currentScanningBay}</strong>. Il sera classé <em>ÉCART D'EMPLACEMENT</em> pour vérification.
               </div>
-              <div className="flex items-center justify-between text-slate-300">
-                <span>{t.chkSerialMatch}</span>
-                <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono-numbers">
-                  <Check className="w-3.5 h-3.5" /> VERIFIED
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-slate-300">
-                <span>{t.chkRfidDetected}</span>
-                <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono-numbers">
-                  <Check className="w-3.5 h-3.5" /> DETECTED (RSSI -42dB)
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-slate-300">
-                <span>{t.chkTamperSeal}</span>
-                <span className={`font-bold flex items-center gap-1 font-mono-numbers ${
-                  activeAsset.tamperSealIntact ? 'text-emerald-400' : 'text-rose-400'
-                }`}>
-                  {activeAsset.tamperSealIntact ? 'INTACT' : 'FLAGGED / BROKEN'}
-                </span>
-              </div>
-            </div>
+            )}
 
             {/* One-Thumb Big Confirm Button (44px target) */}
             <div className="pt-2">
               <button
                 onClick={() => {
                   sound.playScanSuccess();
-                  onReconcileAsset(activeAsset.id);
+                  onReconcileAsset(activeAsset.id, currentScanningBay);
                 }}
                 className="w-full h-12 bg-[#0284C7] hover:bg-[#0369a1] text-white rounded font-bold text-sm shadow-xl flex items-center justify-center gap-2 active:scale-98 transition-all border border-sky-400"
               >
@@ -386,7 +494,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-slate-500 text-xs">
-            قم بمسح أي كود باركود للبدء
+            Scannez un code-barres pour démarrer l'inspection
           </div>
         )}
       </div>

@@ -1,13 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { 
-  FileCheck2, 
   Download, 
   Printer, 
   FileSpreadsheet, 
   CheckCircle2, 
   AlertTriangle, 
-  XCircle, 
-  PenTool, 
   RotateCcw, 
   Lock,
   Stamp
@@ -36,33 +33,49 @@ export const AuditReportManifest: React.FC<AuditReportManifestProps> = ({
   const [successMessage, setSuccessMessage] = useState('');
 
   const total = assets.length;
-  const reconciled = assets.filter(a => a.status === 'reconciled').length;
-  const discrepancies = assets.filter(a => a.status === 'discrepancy').length;
-  const missing = assets.filter(a => a.status === 'missing').length;
+  const reconciled = assets.filter(a => a.inventoryStatus === 'CONFORME').length;
+  const discrepancies = assets.filter(a => a.inventoryStatus === 'ECART_LOCALISATION').length;
+  const missing = assets.filter(a => a.inventoryStatus === 'MANQUANT').length;
   const accuracyRate = total > 0 ? ((reconciled / total) * 100).toFixed(1) : '0';
+
+  const getDisplayName = (a: Asset) => {
+    if (lang === 'fr') return a.nameFr || a.name;
+    if (lang === 'ar') return a.nameAr;
+    return a.name;
+  };
+
+  const getDisplayNotes = (a: Asset) => {
+    if (lang === 'fr') return a.notesFr || a.notes || '';
+    return a.notes || '';
+  };
 
   // Export CSV
   const handleExportCSV = () => {
     sound.playScanSuccess();
-    const headers = ["Asset ID", "Name", "Serial Number", "Barcode", "Category", "Location", "Condition", "Status", "Last Scanned", "Notes"];
+    const headers = lang === 'fr'
+      ? ["Tag Actif", "Désignation", "N° Série", "Code-Barres", "Catégorie", "Emplacement", "État", "Statut", "Dernier Scan", "Remarques"]
+      : lang === 'ar'
+      ? ["رمز الأصل", "الوصف", "الرقم التسلسلي", "الباركود", "التصنيف", "الموقع", "الحالة", "حالة التدقيق", "آخر مسح", "ملاحظات"]
+      : ["Asset ID", "Name", "Serial Number", "Barcode", "Category", "Location", "Condition", "Status", "Last Scanned", "Notes"];
+
     const rows = assets.map(a => [
       a.id,
-      `"${a.name.replace(/"/g, '""')}"`,
+      `"${getDisplayName(a).replace(/"/g, '""')}"`,
       a.serialNumber,
       a.barcode,
       a.category,
-      a.bayLocation,
+      a.scannedBayLocation || a.expectedBayLocation,
       a.condition,
-      a.status,
+      a.inventoryStatus,
       a.lastScannedAt || "N/A",
-      `"${(a.notes || '').replace(/"/g, '""')}"`
+      `"${getDisplayNotes(a).replace(/"/g, '""')}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `AUDIT_MANIFEST_AUD-2026-Q1_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `BORDEREAU_AUDIT_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -74,7 +87,7 @@ export const AuditReportManifest: React.FC<AuditReportManifestProps> = ({
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(assets, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `AUDIT_EXPORT_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute("download", `AUDIT_SCHEMA_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -207,7 +220,7 @@ export const AuditReportManifest: React.FC<AuditReportManifestProps> = ({
         </div>
 
         <div className="divide-y divide-slate-200 text-xs">
-          {assets.filter(a => a.status === 'discrepancy' || a.status === 'missing').map((item) => (
+          {assets.filter(a => a.inventoryStatus === 'ECART_LOCALISATION' || a.inventoryStatus === 'MANQUANT').map((item) => (
             <div key={item.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3 hover:bg-slate-50">
               <div className="flex items-center gap-3">
                 <span className="font-mono-numbers font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -215,22 +228,22 @@ export const AuditReportManifest: React.FC<AuditReportManifestProps> = ({
                 </span>
                 <div>
                   <div className="font-bold text-slate-800">
-                    {lang === 'ar' ? item.nameAr : item.name}
+                    {getDisplayName(item)}
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono-numbers mt-0.5">
-                    LOC: <span className="font-bold text-sky-700">{item.bayLocation}</span> &bull; SN: {item.serialNumber}
+                    LOC: <span className="font-bold text-sky-700">{item.scannedBayLocation || item.expectedBayLocation}</span> &bull; SN: {item.serialNumber}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <span className="text-[11px] text-slate-600 bg-slate-100 px-2.5 py-1 rounded italic max-w-sm">
-                  &ldquo;{item.notes}&rdquo;
+                  &ldquo;{getDisplayNotes(item)}&rdquo;
                 </span>
 
-                {item.status === 'discrepancy' ? (
+                {item.inventoryStatus === 'ECART_LOCALISATION' ? (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                    {t.statDiscrepancy}
+                    {t.statLocationDiff}
                   </span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
@@ -254,7 +267,7 @@ export const AuditReportManifest: React.FC<AuditReportManifestProps> = ({
           </div>
           {isLocked && (
             <span className="bg-emerald-100 text-emerald-800 font-bold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 border border-emerald-300 font-mono-numbers">
-              <Lock className="w-3.5 h-3.5" /> CERTIFIED & LOCKED
+              <Lock className="w-3.5 h-3.5" /> {t.certifiedLocked}
             </span>
           )}
         </div>

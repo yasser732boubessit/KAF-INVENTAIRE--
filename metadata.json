@@ -2,5 +2,7 @@
   "name": "Precision Industrial Asset Cockpit",
   "description": "High-density, mission-critical operational cockpit for physical asset management, barcode verification, and offline-first industrial reconciliation with multi-screen warehouse tracking.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
