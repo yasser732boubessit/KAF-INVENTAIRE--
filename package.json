@@ -7,8 +7,34 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "clean": "rm -rf dist server.js dist-electron",
+    "lint": "tsc --noEmit",
+    "electron:dev": "concurrently \"vite --port=3000\" \"wait-on tcp:3000 && electron .\"",
+    "electron:build:win": "vite build && electron-builder --win --x64",
+    "electron:pack": "vite build && electron-builder --dir"
+  },
+  "main": "electron/main.ts",
+  "build": {
+    "appId": "com.kafinventaire.desktop",
+    "productName": "KAF-INVENTAIRE",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KAF-INVENTAIRE"
+    }
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

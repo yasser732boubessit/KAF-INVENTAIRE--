@@ -1,14 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
-  LayoutDashboard,
-  ScanLine,
-  PackageSearch,
   ClipboardCheck,
-  MapPin,
-  Database,
-  ShieldCheck,
-  CheckSquare,
-  FileText,
   Search,
   X,
   Languages,
@@ -19,7 +11,7 @@ import {
   RefreshCw,
   HardDrive,
   AlertTriangle,
-  MoreHorizontal,
+  ScanLine,
   ChevronDown
 } from 'lucide-react';
 import { ActiveScreen, Language, UserRole } from '../types';
@@ -35,7 +27,6 @@ interface TopOperationalStripProps {
   setIsOnline: (online: boolean) => void;
   pendingMutationCount: number;
   conflictCount: number;
-  pendingDiscoveriesCount: number;
   userRole: UserRole;
   onRoleChange: (role: UserRole) => void;
   onQuickSearch?: (query: string) => void;
@@ -44,15 +35,7 @@ interface TopOperationalStripProps {
   onOpenConflicts?: () => void;
   activeCampaignTitle?: string;
   activeCampaignProgress?: number;
-}
-
-interface NavItemDef {
-  id: ActiveScreen;
-  label: string;
-  icon: React.ReactNode;
-  badge?: number;
-  badgeColor?: 'yellow' | 'green' | 'neutral';
-  shortcut: string;
+  isElectron?: boolean;
 }
 
 export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
@@ -64,7 +47,6 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
   setIsOnline,
   pendingMutationCount,
   conflictCount,
-  pendingDiscoveriesCount,
   userRole,
   onRoleChange,
   onQuickSearch,
@@ -72,65 +54,13 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
   isFlushing = false,
   onOpenConflicts,
   activeCampaignTitle = 'CAMP-2026-Q1',
-  activeCampaignProgress = 75
+  activeCampaignProgress = 75,
+  isElectron = false,
 }) => {
   const t = translations[lang];
   const [searchQuery, setSearchQuery] = useState('');
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-  const langMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdowns on outside click
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setIsMoreMenuOpen(false);
-      }
-      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
-        setIsLangMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
-
-  // Keyboard shortcuts (Alt+1 through Alt+9, and "/" for search)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
-      
-      if (e.key === '/' && !isInput) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        return;
-      }
-
-      if (e.altKey && e.key >= '1' && e.key <= '9') {
-        e.preventDefault();
-        const map: Record<string, ActiveScreen> = {
-          '1': 'cockpit',
-          '2': 'scanner',
-          '3': 'decouvertes',
-          '4': 'campagnes',
-          '5': 'warehouse_map',
-          '6': 'offline_queue',
-          '7': 'audit_logs',
-          '8': 'checklist',
-          '9': 'reports'
-        };
-        const target = map[e.key];
-        if (target) {
-          setActiveScreen(target);
-          sound.playScanSuccess();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveScreen]);
 
   // Handle Search Submission
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -140,81 +70,13 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
     }
   };
 
-  // Primary navigation items (Direct access in Level 2)
-  const primaryNavItems: NavItemDef[] = [
-    { 
-      id: 'cockpit', 
-      label: t.screenCockpit, 
-      icon: <LayoutDashboard className="w-4 h-4" />, 
-      shortcut: 'Alt+1'
-    },
-    { 
-      id: 'scanner', 
-      label: t.screenScanner, 
-      icon: <ScanLine className="w-4 h-4" />, 
-      shortcut: 'Alt+2'
-    },
-    { 
-      id: 'decouvertes', 
-      label: t.screenDiscoveries, 
-      icon: <PackageSearch className="w-4 h-4" />, 
-      badge: pendingDiscoveriesCount,
-      badgeColor: 'yellow',
-      shortcut: 'Alt+3'
-    },
-    { 
-      id: 'campagnes', 
-      label: t.screenCampaigns, 
-      icon: <ClipboardCheck className="w-4 h-4" />, 
-      shortcut: 'Alt+4'
-    },
-    { 
-      id: 'warehouse_map', 
-      label: t.screenWarehouseMap, 
-      icon: <MapPin className="w-4 h-4" />, 
-      shortcut: 'Alt+5'
-    },
-    { 
-      id: 'offline_queue', 
-      label: t.screenOfflineQueue, 
-      icon: <Database className="w-4 h-4" />, 
-      badge: pendingMutationCount,
-      badgeColor: 'neutral',
-      shortcut: 'Alt+6'
-    },
-    { 
-      id: 'audit_logs', 
-      label: t.screenAuditLogs, 
-      icon: <ShieldCheck className="w-4 h-4" />, 
-      shortcut: 'Alt+7'
-    },
-  ];
-
-  // Secondary modules (Inside "Plus" dropdown)
-  const secondaryNavItems: NavItemDef[] = [
-    { 
-      id: 'checklist', 
-      label: t.screenChecklist, 
-      icon: <CheckSquare className="w-4 h-4" />, 
-      shortcut: 'Alt+8'
-    },
-    { 
-      id: 'reports', 
-      label: t.screenReports, 
-      icon: <FileText className="w-4 h-4" />, 
-      shortcut: 'Alt+9'
-    },
-  ];
-
-  const isSecondaryActive = secondaryNavItems.some(item => item.id === activeScreen);
-
   return (
     <header className="bg-[#0B0F17] text-white border-b border-neutral-800 sticky top-0 z-40 select-none shadow-md">
       {/* =========================================================================
-          NIVEAU 1 — BARRE SYSTÈME (System Bar)
+          NIVEAU 1 — BARRE SYSTÈME COMPACTE (Compact System Bar)
           Logo KAF-INVENTAIRE | Recherche globale | Campagne active | Réseau & Sync | Langues | Rôle
           ========================================================================= */}
-      <div className="px-4 py-2 border-b border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-3">
+      <div className="px-4 py-2 border-b border-neutral-800/80 flex flex-wrap items-center justify-between text-xs gap-3">
         {/* Gauche: Logo KAF-INVENTAIRE & Terminal */}
         <div className="flex items-center gap-3">
           <div 
@@ -233,6 +95,18 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
               TRM-01
             </span>
           </div>
+
+          {/* Desktop SQLite Engine Badge */}
+          <button
+            onClick={() => setActiveScreen('desktop')}
+            className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 hover:border-[#16A34A] text-neutral-300 hover:text-white transition-colors"
+            title="Ouvrir le centre de contrôle SQLite Desktop"
+          >
+            <HardDrive className="w-3 h-3 text-[#16A34A]" />
+            <span className="text-[10px] font-mono">
+              {isElectron ? 'SQLITE NATIVE (WAL)' : 'SQLITE OFFLINE ENGINE'}
+            </span>
+          </button>
 
           {/* Campagne d'inventaire active et pourcentage de progression */}
           <button
@@ -285,16 +159,29 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
           </form>
         </div>
 
-        {/* Droite: Connexion, Langues, Profil & Rôle */}
+        {/* Droite: Quick Scan + Connexion, Langues, Profil & Rôle */}
         <div className="flex items-center gap-2">
-          {/* État de connexion au serveur */}
+          {/* Quick Scan Button (Compact) */}
           <button
-            onClick={() => setIsOnline(!isOnline)}
-            title={
-              isOnline 
-                ? (lang === 'fr' ? 'Connexion active. Cliquer pour simuler le mode hors-ligne.' : lang === 'ar' ? 'الاتصال نشط. انقر للمحاكاة دون اتصال' : 'Connection active. Click to simulate offline mode.')
-                : (lang === 'fr' ? 'Mode hors-ligne actif. Cliquer pour reconnecter.' : lang === 'ar' ? 'الوضع دون اتصال نشط. انقر لإعادة الاتصال' : 'Offline mode active. Click to reconnect.')
-            }
+            onClick={() => setActiveScreen('scanner')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded shadow transition-colors ${
+              activeScreen === 'scanner'
+                ? 'bg-[#16A34A] text-white ring-2 ring-[#16A34A]/50'
+                : 'bg-[#16A34A] hover:bg-[#15803D] text-white'
+            }`}
+            title="Activer le scanner optique ou la caméra (Alt+2)"
+          >
+            <ScanLine className="w-3.5 h-3.5 text-white" />
+            <span className="hidden sm:inline">{t.quickScanBtn}</span>
+          </button>
+
+          {/* État de connexion au réseau */}
+          <button
+            onClick={() => {
+              setIsOnline(!isOnline);
+              sound.playTap();
+            }}
+            title={isOnline ? t.networkOnline : t.networkOffline}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-medium transition-colors ${
               isOnline 
                 ? 'bg-neutral-900 border-neutral-700 text-[#16A34A] hover:bg-neutral-800' 
@@ -305,7 +192,6 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
               <>
                 <Wifi className="w-3.5 h-3.5 text-[#16A34A]" />
                 <span className="hidden md:inline">{t.networkOnline}</span>
-                <span className="font-mono text-[10px] text-neutral-400">(12ms)</span>
               </>
             ) : (
               <>
@@ -316,7 +202,7 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
           </button>
 
           {/* Sélecteur de Langue (AR / FR / EN) */}
-          <div className="relative" ref={langMenuRef}>
+          <div className="relative">
             <button
               onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
               className="flex items-center gap-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 px-2 py-1 rounded text-[11px] text-white transition-colors"
@@ -330,21 +216,21 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
             {isLangMenuOpen && (
               <div className="absolute right-0 mt-1 w-28 bg-neutral-900 border border-neutral-700 rounded shadow-lg py-1 z-50 text-xs">
                 <button
-                  onClick={() => { setLang('fr'); setIsLangMenuOpen(false); }}
+                  onClick={() => { setLang('fr'); setIsLangMenuOpen(false); sound.playTap(); }}
                   className={`w-full text-left px-3 py-1.5 hover:bg-neutral-800 flex items-center justify-between ${lang === 'fr' ? 'text-[#16A34A] font-bold' : 'text-white'}`}
                 >
                   <span>Français</span>
                   {lang === 'fr' && <span className="text-[#16A34A]">✓</span>}
                 </button>
                 <button
-                  onClick={() => { setLang('ar'); setIsLangMenuOpen(false); }}
+                  onClick={() => { setLang('ar'); setIsLangMenuOpen(false); sound.playTap(); }}
                   className={`w-full text-left px-3 py-1.5 hover:bg-neutral-800 flex items-center justify-between ${lang === 'ar' ? 'text-[#16A34A] font-bold' : 'text-white'}`}
                 >
                   <span>العربية</span>
                   {lang === 'ar' && <span className="text-[#16A34A]">✓</span>}
                 </button>
                 <button
-                  onClick={() => { setLang('en'); setIsLangMenuOpen(false); }}
+                  onClick={() => { setLang('en'); setIsLangMenuOpen(false); sound.playTap(); }}
                   className={`w-full text-left px-3 py-1.5 hover:bg-neutral-800 flex items-center justify-between ${lang === 'en' ? 'text-[#16A34A] font-bold' : 'text-white'}`}
                 >
                   <span>English</span>
@@ -378,115 +264,20 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
       </div>
 
       {/* =========================================================================
-          NIVEAU 2 — NAVIGATION PRINCIPALE (Main Navigation)
-          Modules principaux + Menu "Plus" + Bouton Action "Scan Rapide"
-          Palette : Blanc pour les labels, Vert #16A34A pour l'onglet actif et l'action principale, Jaune #FACC15 pour les alertes
+          NIVEAU 2 — CONTEXTE OPÉRATIONNEL & TRANSACTIONS
+          IndexedDB / SQLite Storage | File d'attente | Alertes conflits
           ========================================================================= */}
-      <div className="bg-[#111827] px-4 border-b border-neutral-800 flex items-center justify-between overflow-x-auto no-scrollbar">
-        <nav className="flex items-center gap-1 py-1" aria-label={t.navOverview}>
-          {primaryNavItems.map((item) => {
-            const isActive = activeScreen === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveScreen(item.id)}
-                title={`${item.label} (${item.shortcut})`}
-                className={`flex items-center gap-2 px-3 py-2 text-xs rounded transition-all whitespace-nowrap border-b-2 relative ${
-                  isActive
-                    ? 'border-[#16A34A] bg-neutral-800/80 text-white font-medium'
-                    : 'border-transparent text-neutral-400 hover:text-white hover:bg-neutral-800/40'
-                }`}
-              >
-                <span className={isActive ? 'text-white' : 'text-neutral-400'}>
-                  {item.icon}
-                </span>
-                <span>{item.label}</span>
-
-                {/* Badge d'attention (Jaune #FACC15 pour alertes découvertes, ou neutre) */}
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${
-                    item.badgeColor === 'yellow'
-                      ? 'bg-[#FACC15] text-black animate-pulse'
-                      : 'bg-neutral-700 text-white'
-                  }`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Menu "Plus de modules" pour les modules secondaires */}
-          <div className="relative" ref={moreMenuRef}>
-            <button
-              onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs rounded transition-all whitespace-nowrap border-b-2 ${
-                isSecondaryActive
-                  ? 'border-[#16A34A] bg-neutral-800/80 text-white font-medium'
-                  : 'border-transparent text-neutral-400 hover:text-white hover:bg-neutral-800/40'
-              }`}
-              title={t.lvl2More}
-            >
-              <MoreHorizontal className="w-4 h-4" />
-              <span>{t.lvl2More}</span>
-              <ChevronDown className="w-3 h-3 opacity-60" />
-            </button>
-
-            {isMoreMenuOpen && (
-              <div className="absolute left-0 mt-1 w-56 bg-neutral-900 border border-neutral-700 rounded shadow-xl py-1 z-50 text-xs">
-                {secondaryNavItems.map((item) => {
-                  const isActive = activeScreen === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setActiveScreen(item.id);
-                        setIsMoreMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-neutral-800 transition-colors ${
-                        isActive ? 'text-[#16A34A] font-bold bg-neutral-800/60' : 'text-white'
-                      }`}
-                    >
-                      <span className={isActive ? 'text-[#16A34A]' : 'text-neutral-400'}>{item.icon}</span>
-                      <span className="flex-1">{item.label}</span>
-                      <span className="text-[10px] text-neutral-500 font-mono">{item.shortcut}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </nav>
-
-        {/* Action Principale : Bouton "Scan Rapide" (Vert #16A34A) */}
-        <div className="hidden sm:flex items-center pl-3">
-          <button
-            onClick={() => setActiveScreen('scanner')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded shadow transition-colors ${
-              activeScreen === 'scanner'
-                ? 'bg-[#16A34A] text-white ring-2 ring-[#16A34A]/50'
-                : 'bg-[#16A34A] hover:bg-[#15803D] text-white'
-            }`}
-            title="Activer le scanner optique ou la caméra"
-          >
-            <ScanLine className="w-4 h-4 text-white" />
-            <span className="whitespace-nowrap">{t.quickScanBtn}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* =========================================================================
-          NIVEAU 3 — BARRE DE CONTEXTE OPÉRATIONNEL (Operational Context Bar)
-          Stockage IndexedDB | Opérations en attente | Conflits à arbitrer | Actions contextuelles
-          Palette : Noir/Gris neutre structurel, Vert #16A34A (OK/Sync), Jaune #FACC15 (Conflits/Avertissements), Blanc #FFFFFF
-          ========================================================================= */}
-      <div className="bg-[#0A0D14] px-4 py-2 flex flex-wrap items-center justify-between text-xs gap-3 border-t border-neutral-900">
+      <div className="bg-[#0A0D14] px-4 py-1.5 flex flex-wrap items-center justify-between text-xs gap-3">
         {/* Informations opérationnelles */}
         <div className="flex items-center gap-3 flex-wrap">
-          {/* État stockage local IndexedDB */}
-          <div className="flex items-center gap-1.5 text-neutral-300 font-mono text-[11px]" title="Base de données locale IndexedDB">
-            <HardDrive className="w-3.5 h-3.5 text-neutral-400" />
-            <span>{t.lvl3StorageOk}</span>
+          {/* État stockage local */}
+          <div 
+            onClick={() => setActiveScreen('desktop')}
+            className="flex items-center gap-1.5 text-neutral-300 font-mono text-[11px] cursor-pointer hover:text-white transition-colors" 
+            title="Cliquer pour afficher l'explorateur SQLite"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-[#16A34A]" />
+            <span>{isElectron ? 'SQLite Windows WAL' : 'IndexedDB SQLite (100% Hors-ligne)'}</span>
           </div>
 
           <div className="h-3.5 w-px bg-neutral-800 hidden sm:block" />
@@ -495,7 +286,7 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
           <div className="flex items-center gap-1.5 text-xs font-mono">
             {pendingMutationCount > 0 ? (
               <>
-                <RefreshCw className="w-3.5 h-3.5 text-neutral-400" />
+                <RefreshCw className="w-3.5 h-3.5 text-[#FACC15]" />
                 <span className="text-white font-bold">{pendingMutationCount}</span>
                 <span className="text-neutral-300">{t.lvl3PendingCount}</span>
               </>
@@ -538,7 +329,7 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
             </button>
           )}
 
-          {/* Action : Synchroniser maintenant / Reprendre la synchronisation (Vert #16A34A) */}
+          {/* Action : Synchroniser maintenant (Vert #16A34A) */}
           {pendingMutationCount > 0 && onFlushQueue && (
             <button
               onClick={onFlushQueue}

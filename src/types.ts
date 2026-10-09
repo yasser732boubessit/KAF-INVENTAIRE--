@@ -133,10 +133,104 @@ export type ActiveScreen =
   | 'scanner' 
   | 'decouvertes' 
   | 'campagnes' 
-  | 'offline_queue' 
   | 'warehouse_map' 
+  | 'offline_queue' 
   | 'audit_logs' 
+  | 'checklist' 
   | 'reports' 
-  | 'checklist';
+  | 'desktop';
+
+export interface SQLiteDatabaseStats {
+  engine: 'ELECTRON_SQLITE' | 'BROWSER_INDEXEDDB_SQLITE';
+  totalAssets: number;
+  conformeAssets: number;
+  locationDiffAssets: number;
+  missingAssets: number;
+  unverifiedAssets: number;
+  totalDiscoveries: number;
+  pendingDiscoveries: number;
+  totalMutations: number;
+  pendingMutations: number;
+  totalAuditLogs: number;
+  totalZones: number;
+  closedZones: number;
+  databasePath: string;
+  databaseSizeBytes: number;
+  journalMode: string;
+  integrityStatus: 'OK' | 'CORRUPTED' | 'CHECKING';
+  lastBackupAt: string | null;
+  sqliteVersion: string;
+}
+
+export interface DatabaseBackup {
+  version: string;
+  exportedAt: string;
+  source: string;
+  schemaVersion: number;
+  data: {
+    assets: Asset[];
+    discoveries: DiscoveredAsset[];
+    campaigns: InventoryCampaign[];
+    mutations: OfflineMutation[];
+    conflicts: ConflictItem[];
+    auditLogs: AuditLogEntry[];
+    checklist: ValidationChecklistItem[];
+  };
+}
+
+export interface ElectronAPIType {
+  isElectron: boolean;
+  platform: string;
+  versions: {
+    electron: string;
+    node: string;
+    chrome: string;
+  };
+  db: {
+    getStats: () => Promise<SQLiteDatabaseStats>;
+    getAssets: () => Promise<Asset[]>;
+    getAssetById: (id: string) => Promise<Asset | null>;
+    searchAssets: (query: string) => Promise<Asset[]>;
+    createAsset: (asset: Asset) => Promise<Asset>;
+    updateAsset: (id: string, fields: Partial<Asset>) => Promise<Asset>;
+    updateInventoryStatus: (id: string, status: InventoryResultStatus, bayLocation?: string, user?: string) => Promise<Asset>;
+    getDiscoveries: () => Promise<DiscoveredAsset[]>;
+    createDiscovery: (discovery: DiscoveredAsset) => Promise<DiscoveredAsset>;
+    matchDiscovery: (id: string, assetId: string) => Promise<void>;
+    integrateDiscovery: (id: string, officialCode: string) => Promise<Asset>;
+    rejectDiscovery: (id: string, reason: string) => Promise<void>;
+    getCampaign: () => Promise<InventoryCampaign>;
+    closeZone: (zoneId: string, user: string) => Promise<void>;
+    reopenZone: (zoneId: string) => Promise<void>;
+    lockCampaign: () => Promise<void>;
+    getAuditLogs: () => Promise<AuditLogEntry[]>;
+    addAuditLog: (entry: Omit<AuditLogEntry, 'id' | 'timestamp'>) => Promise<AuditLogEntry>;
+    getMutations: () => Promise<OfflineMutation[]>;
+    addMutation: (mutation: Omit<OfflineMutation, 'id' | 'timestamp' | 'retryCount'>) => Promise<OfflineMutation>;
+    flushMutations: () => Promise<number>;
+    clearMutations: () => Promise<void>;
+    getConflicts: () => Promise<ConflictItem[]>;
+    resolveConflict: (conflictId: string, resolution: 'local' | 'server' | 'merge') => Promise<void>;
+    getChecklist: () => Promise<ValidationChecklistItem[]>;
+    updateChecklist: (id: number, status: 'PASSED' | 'PENDING' | 'FAILED') => Promise<void>;
+    exportBackup: () => Promise<DatabaseBackup>;
+    importBackup: (backup: DatabaseBackup) => Promise<boolean>;
+    resetSeed: () => Promise<void>;
+    runIntegrityCheck: () => Promise<string>;
+    exportSqlDump: () => Promise<string>;
+  };
+  system: {
+    getAppInfo: () => Promise<{ appName: string; version: string; dataDir: string }>;
+    printManifest: () => Promise<void>;
+    exportCsvFile: (filename: string, content: string) => Promise<boolean>;
+    openDataFolder: () => Promise<void>;
+  };
+}
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronAPIType;
+  }
+}
 
 export type Language = 'fr' | 'ar' | 'en';

@@ -28,6 +28,7 @@ import {
   initialChecklist 
 } from './mockData';
 import { TopOperationalStrip } from './components/TopOperationalStrip';
+import { RightSidebar } from './components/RightSidebar';
 import { ReconciliationCockpit } from './components/ReconciliationCockpit';
 import { AssetInspector } from './components/AssetInspector';
 import { FieldScannerTerminal } from './components/FieldScannerTerminal';
@@ -38,8 +39,10 @@ import { WarehouseMapView } from './components/WarehouseMapView';
 import { AuditTrailView } from './components/AuditTrailView';
 import { ChecklistValidationView } from './components/ChecklistValidationView';
 import { AuditReportManifest } from './components/AuditReportManifest';
+import { DesktopDatabaseCenter } from './components/DesktopDatabaseCenter';
 import { NewAssetModal } from './components/NewAssetModal';
 import { sound } from './utils/audio';
+import { dbService } from './services/databaseService';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('fr');
@@ -129,7 +132,66 @@ export default function App() {
     document.documentElement.setAttribute('lang', lang);
   }, [lang]);
 
-  // Persist state to localStorage for offline reliability
+  // Global Keyboard Navigation (Alt+1 through Alt+9, Alt+0 for Desktop)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
+      if (isInput) return;
+
+      if (e.altKey) {
+        const keyMap: Record<string, ActiveScreen> = {
+          '1': 'cockpit',
+          '2': 'scanner',
+          '3': 'decouvertes',
+          '4': 'campagnes',
+          '5': 'warehouse_map',
+          '6': 'offline_queue',
+          '7': 'audit_logs',
+          '8': 'checklist',
+          '9': 'reports',
+          '0': 'desktop'
+        };
+        const target = keyMap[e.key];
+        if (target) {
+          e.preventDefault();
+          setActiveScreen(target);
+          sound.playScanSuccess();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Refresh all state from local Database Engine
+  const refreshFromDB = async () => {
+    try {
+      const [dbAssets, dbMutations, dbConflicts, dbCamp, dbDisc, dbLogs, dbChk] = await Promise.all([
+        dbService.getAssets(),
+        dbService.getMutations(),
+        dbService.getConflicts(),
+        dbService.getCampaign(),
+        dbService.getDiscoveries(),
+        dbService.getAuditLogs(),
+        dbService.getChecklist()
+      ]);
+      setAssets(dbAssets);
+      setMutations(dbMutations);
+      setConflicts(dbConflicts);
+      setCampaign(dbCamp);
+      setDiscoveries(dbDisc);
+      setAuditLogs(dbLogs);
+      setChecklist(dbChk);
+    } catch (e) {
+      console.warn('Initial DB sync note:', e);
+    }
+  };
+
+  useEffect(() => {
+    refreshFromDB();
+  }, []);
+
+  // Persist state to localStorage & dbService for offline reliability
   useEffect(() => {
     try {
       localStorage.setItem('kaf_assets_v3', JSON.stringify(assets));
@@ -670,12 +732,30 @@ export default function App() {
     } : item));
   };
 
+  const handleQuickBackup = async () => {
+    try {
+      const sql = await dbService.exportSqlDump();
+      const blob = new Blob([sql], { type: 'application/sql' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kaf_inventaire_quick_backup_${new Date().toISOString().slice(0, 10)}.sql`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      sound.playScanSuccess();
+    } catch {
+      sound.playAlert();
+    }
+  };
+
   const pendingDiscoveriesCount = discoveries.filter(d => d.status === 'EN_ATTENTE_REVUE').length;
   const missingAssets = assets.filter(a => a.inventoryStatus === 'MANQUANT');
 
   return (
     <div className="min-h-screen h-screen flex flex-col bg-[#F8FAFC] text-[#0F172A] overflow-hidden select-none">
-      {/* Unified 3-Tier Industrial ERP Navbar (Niveau 1: Barre Système, Niveau 2: Navigation Principale, Niveau 3: Contexte Opérationnel) */}
+      {/* Unified Industrial ERP Compact System Navbar */}
       <TopOperationalStrip
         activeScreen={activeScreen}
         setActiveScreen={setActiveScreen}
@@ -685,7 +765,6 @@ export default function App() {
         setIsOnline={setIsOnline}
         pendingMutationCount={mutations.filter(m => m.syncStatus === 'PENDING').length}
         conflictCount={conflicts.length}
-        pendingDiscoveriesCount={pendingDiscoveriesCount}
         userRole={userRole}
         onRoleChange={setUserRole}
         onQuickSearch={handleQuickSearch}
@@ -694,132 +773,156 @@ export default function App() {
         onOpenConflicts={() => setActiveScreen('offline_queue')}
         activeCampaignTitle={campaign.title}
         activeCampaignProgress={campaign.progressPercent ?? (campaign.zones.length > 0 ? Math.round((campaign.zones.filter(z => z.isClosed).length / campaign.zones.length) * 100) : 75)}
+        isElectron={dbService.isElectron()}
       />
 
-      {/* 3. Screen Viewport */}
-      <main className="flex-1 flex min-h-0 overflow-hidden relative">
-        {/* Screen 1: Operational Inventory Cockpit */}
-        {activeScreen === 'cockpit' && (
-          <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden w-full">
-            <ReconciliationCockpit
-              assets={assets}
-              selectedAsset={selectedAsset}
-              onSelectAsset={setSelectedAsset}
-              onUpdateInventoryStatus={handleUpdateInventoryStatus}
-              onOpenNewAssetModal={() => setIsNewAssetModalOpen(true)}
-              onTriggerSimulatedScan={handleTriggerSimulatedScan}
-              lang={lang}
-            />
-
-            {/* Diagnostic Asset Inspector Panel */}
-            {selectedAsset && (
-              <AssetInspector
-                asset={selectedAsset}
-                onClose={() => setSelectedAsset(null)}
-                onUpdateAsset={handleUpdateAsset}
+      {/* Main Workspace with Vertical Sidebar Anchored on the Right */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative flex-row" style={{ direction: 'ltr' }}>
+        {/* Screen Viewport with localized content direction */}
+        <main className="flex-1 flex min-h-0 overflow-hidden relative" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+          {/* Screen 1: Operational Inventory Cockpit */}
+          {activeScreen === 'cockpit' && (
+            <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden w-full">
+              <ReconciliationCockpit
+                assets={assets}
+                selectedAsset={selectedAsset}
+                onSelectAsset={setSelectedAsset}
+                onUpdateInventoryStatus={handleUpdateInventoryStatus}
+                onOpenNewAssetModal={() => setIsNewAssetModalOpen(true)}
+                onTriggerSimulatedScan={handleTriggerSimulatedScan}
                 lang={lang}
               />
-            )}
-          </div>
-        )}
 
-        {/* Screen 2: Field Scanner Handheld Terminal with Real Camera & Laser */}
-        {activeScreen === 'scanner' && (
-          <FieldScannerTerminal
-            assets={assets}
-            currentScanningBay={currentScanningBay}
-            onSetScanningBay={setCurrentScanningBay}
-            onReconcileAsset={handleReconcileFromScanner}
-            onOpenDiscoveryModalWithCode={(_code) => {
-              setActiveScreen('decouvertes');
-            }}
-            lang={lang}
-          />
-        )}
+              {/* Diagnostic Asset Inspector Panel */}
+              {selectedAsset && (
+                <AssetInspector
+                  asset={selectedAsset}
+                  onClose={() => setSelectedAsset(null)}
+                  onUpdateAsset={handleUpdateAsset}
+                  lang={lang}
+                />
+              )}
+            </div>
+          )}
 
-        {/* Screen 3: Unregistered Field Discoveries */}
-        {activeScreen === 'decouvertes' && (
-          <UnregisteredDiscoveriesView
-            discoveries={discoveries}
-            missingAssets={missingAssets}
-            userRole={userRole}
-            onAddDiscovery={handleAddDiscovery}
-            onMatchWithMissing={handleMatchWithMissing}
-            onIntegrateOfficial={handleIntegrateOfficial}
-            onRejectDiscovery={handleRejectDiscovery}
-            lang={lang}
-          />
-        )}
+          {/* Screen 2: Field Scanner Handheld Terminal with Real Camera & Laser */}
+          {activeScreen === 'scanner' && (
+            <FieldScannerTerminal
+              assets={assets}
+              currentScanningBay={currentScanningBay}
+              onSetScanningBay={setCurrentScanningBay}
+              onReconcileAsset={handleReconcileFromScanner}
+              onOpenDiscoveryModalWithCode={(_code) => {
+                setActiveScreen('decouvertes');
+              }}
+              lang={lang}
+            />
+          )}
 
-        {/* Screen 4: Campaigns & Formal Zone Closure */}
-        {activeScreen === 'campagnes' && (
-          <CampaignManagementView
-            campaign={campaign}
-            assets={assets}
-            userRole={userRole}
-            onCloseZone={handleCloseZone}
-            onReopenZone={handleReopenZone}
-            onLockCampaign={handleLockCampaign}
-            lang={lang}
-          />
-        )}
+          {/* Screen 3: Unregistered Field Discoveries */}
+          {activeScreen === 'decouvertes' && (
+            <UnregisteredDiscoveriesView
+              discoveries={discoveries}
+              missingAssets={missingAssets}
+              userRole={userRole}
+              onAddDiscovery={handleAddDiscovery}
+              onMatchWithMissing={handleMatchWithMissing}
+              onIntegrateOfficial={handleIntegrateOfficial}
+              onRejectDiscovery={handleRejectDiscovery}
+              lang={lang}
+            />
+          )}
 
-        {/* Screen 5: Offline Queue & Arbitration Resolver */}
-        {activeScreen === 'offline_queue' && (
-          <OfflineQueueView
-            mutations={mutations}
-            conflicts={conflicts}
-            onFlushQueue={handleFlushQueue}
-            isFlushing={isFlushing}
-            onResolveConflict={handleResolveConflict}
-            isOnline={isOnline}
-            setIsOnline={setIsOnline}
-            lang={lang}
-          />
-        )}
+          {/* Screen 4: Campaigns & Formal Zone Closure */}
+          {activeScreen === 'campagnes' && (
+            <CampaignManagementView
+              campaign={campaign}
+              assets={assets}
+              userRole={userRole}
+              onCloseZone={handleCloseZone}
+              onReopenZone={handleReopenZone}
+              onLockCampaign={handleLockCampaign}
+              lang={lang}
+            />
+          )}
 
-        {/* Screen 6: Warehouse Spatial Topology & Heatmap */}
-        {activeScreen === 'warehouse_map' && (
-          <WarehouseMapView
-            assets={assets}
-            onSelectAsset={(asset) => {
-              setSelectedAsset(asset);
-              setActiveScreen('cockpit');
-            }}
-            onOpenCockpitWithFilter={(_bayId) => {
-              setActiveScreen('cockpit');
-            }}
-            lang={lang}
-          />
-        )}
+          {/* Screen 5: Offline Queue & Arbitration Resolver */}
+          {activeScreen === 'offline_queue' && (
+            <OfflineQueueView
+              mutations={mutations}
+              conflicts={conflicts}
+              onFlushQueue={handleFlushQueue}
+              isFlushing={isFlushing}
+              onResolveConflict={handleResolveConflict}
+              isOnline={isOnline}
+              setIsOnline={setIsOnline}
+              lang={lang}
+            />
+          )}
 
-        {/* Screen 7: Immutable Audit Trail & RBAC Ledger */}
-        {activeScreen === 'audit_logs' && (
-          <AuditTrailView
-            logs={auditLogs}
-            currentRole={userRole}
-            onRoleChange={setUserRole}
-            lang={lang}
-          />
-        )}
+          {/* Screen 6: Warehouse Spatial Topology & Heatmap */}
+          {activeScreen === 'warehouse_map' && (
+            <WarehouseMapView
+              assets={assets}
+              onSelectAsset={(asset) => {
+                setSelectedAsset(asset);
+                setActiveScreen('cockpit');
+              }}
+              onOpenCockpitWithFilter={(_bayId) => {
+                setActiveScreen('cockpit');
+              }}
+              lang={lang}
+            />
+          )}
 
-        {/* Screen 8: Industrial Certification Checklist (9 Scenarios) */}
-        {activeScreen === 'checklist' && (
-          <ChecklistValidationView
-            checklist={checklist}
-            onRunTest={handleRunChecklistTest}
-            lang={lang}
-          />
-        )}
+          {/* Screen 7: Immutable Audit Trail & RBAC Ledger */}
+          {activeScreen === 'audit_logs' && (
+            <AuditTrailView
+              logs={auditLogs}
+              currentRole={userRole}
+              onRoleChange={setUserRole}
+              lang={lang}
+            />
+          )}
 
-        {/* Screen 9: Audit Reconciliation Manifest & Digital Sign-off */}
-        {activeScreen === 'reports' && (
-          <AuditReportManifest
-            assets={assets}
-            lang={lang}
-          />
-        )}
-      </main>
+          {/* Screen 8: Industrial Certification Checklist (9 Scenarios) */}
+          {activeScreen === 'checklist' && (
+            <ChecklistValidationView
+              checklist={checklist}
+              onRunTest={handleRunChecklistTest}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 9: Audit Reconciliation Manifest & Digital Sign-off */}
+          {activeScreen === 'reports' && (
+            <AuditReportManifest
+              assets={assets}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 10: Windows Desktop & SQLite Control Center */}
+          {activeScreen === 'desktop' && (
+            <DesktopDatabaseCenter
+              lang={lang}
+              userRole={userRole}
+              onRefreshData={refreshFromDB}
+            />
+          )}
+        </main>
+
+        {/* Right Vertical Sidebar Navigation */}
+        <RightSidebar
+          activeScreen={activeScreen}
+          setActiveScreen={setActiveScreen}
+          lang={lang}
+          pendingDiscoveriesCount={pendingDiscoveriesCount}
+          pendingMutationCount={mutations.filter(m => m.syncStatus === 'PENDING').length}
+          isElectron={dbService.isElectron()}
+          onQuickBackup={handleQuickBackup}
+        />
+      </div>
 
       {/* Commission Asset Modal */}
       <NewAssetModal
