@@ -139,6 +139,12 @@ export default function App() {
       if (isInput) return;
 
       if (e.altKey) {
+        if (e.key.toLowerCase() === 'm' || e.code === 'KeyM') {
+          e.preventDefault();
+          sound.toggleMute();
+          return;
+        }
+
         const keyMap: Record<string, ActiveScreen> = {
           '1': 'cockpit',
           '2': 'scanner',

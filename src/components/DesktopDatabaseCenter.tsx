@@ -19,12 +19,14 @@ import {
   Check, 
   Copy,
   Table as TableIcon,
-  Cpu
+  Cpu,
+  Image as ImageIcon
 } from 'lucide-react';
 import { SQLiteDatabaseStats, DatabaseBackup, Language, UserRole } from '../types';
 import { dbService } from '../services/databaseService';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { LogoManagerModal } from './LogoManagerModal';
 
 interface DesktopDatabaseCenterProps {
   lang: Language;
@@ -50,6 +52,7 @@ export const DesktopDatabaseCenter: React.FC<DesktopDatabaseCenterProps> = ({
   const [queryResults, setQueryResults] = useState<any[] | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -329,6 +332,15 @@ export const DesktopDatabaseCenter: React.FC<DesktopDatabaseCenterProps> = ({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Actualiser</span>
+          </button>
+
+          <button
+            onClick={() => setIsLogoModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white transition-colors"
+            title={lang === 'ar' ? 'إدارة وتخصيص شعار المؤسسة' : 'Gérer / Personnaliser le logo'}
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{lang === 'ar' ? 'شعار المؤسسة' : 'Logo KAF'}</span>
           </button>
 
           <button
@@ -1011,10 +1023,36 @@ export const DesktopDatabaseCenter: React.FC<DesktopDatabaseCenterProps> = ({
                 <li><strong className="text-white">Emplacement sécurisé des données :</strong> Le fichier local <code>kaf_inventaire.db</code> est isolé dans le répertoire sécurisé de l'utilisateur.</li>
               </ul>
             </div>
+
+            {/* KAF Branding & Logo Management Info */}
+            <div className="p-4 rounded bg-neutral-950 border border-neutral-800 space-y-2 text-xs">
+              <div className="font-bold text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-emerald-400" />
+                  <span>Identité Visuelle & Logo de l'Entreprise (KAF Kotama Agri-Food)</span>
+                </div>
+                <button
+                  onClick={() => setIsLogoModalOpen(true)}
+                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-semibold rounded transition-colors"
+                >
+                  Ouvrir Gestionnaire du Logo
+                </button>
+              </div>
+              <p className="text-neutral-400">
+                Le logo vectoriel officiel <code>public/kaf-logo.svg</code> est utilisé par défaut dans la barre supérieure, la barre latérale, l'icône de l'application et les procès-verbaux de conciliation. Vous pouvez téléverser un logo personnalisé ou restaurer le logo officiel à tout moment.
+              </p>
+            </div>
           </div>
         )}
 
       </div>
+
+      {/* Modal Gestion Logo */}
+      <LogoManagerModal 
+        isOpen={isLogoModalOpen} 
+        onClose={() => setIsLogoModalOpen(false)} 
+        lang={lang} 
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   ClipboardCheck,
   Search,
@@ -12,11 +12,16 @@ import {
   HardDrive,
   AlertTriangle,
   ScanLine,
-  ChevronDown
+  ChevronDown,
+  Volume2,
+  VolumeX,
+  Image as ImageIcon
 } from 'lucide-react';
 import { ActiveScreen, Language, UserRole } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { KafLogo } from './KafLogo';
+import { LogoManagerModal } from './LogoManagerModal';
 
 interface TopOperationalStripProps {
   activeScreen: ActiveScreen;
@@ -60,7 +65,22 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
   const t = translations[lang];
   const [searchQuery, setSearchQuery] = useState('');
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState<boolean>(sound.isMuted);
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleSoundChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ isMuted: boolean }>;
+      if (customEvent.detail) {
+        setIsMuted(customEvent.detail.isMuted);
+      } else {
+        setIsMuted(sound.isMuted);
+      }
+    };
+    window.addEventListener('kaf_sound_changed', handleSoundChange);
+    return () => window.removeEventListener('kaf_sound_changed', handleSoundChange);
+  }, []);
 
   // Handle Search Submission
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -79,18 +99,25 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
       <div className="px-4 py-2 border-b border-neutral-800/80 flex flex-wrap items-center justify-between text-xs gap-3">
         {/* Gauche: Logo KAF-INVENTAIRE & Terminal */}
         <div className="flex items-center gap-3">
-          <div 
-            onClick={() => setActiveScreen('cockpit')}
-            className="flex items-center gap-2 cursor-pointer group"
-            title="KAF-INVENTAIRE Industrial Suite"
-          >
-            <div className="w-6 h-6 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center font-bold text-white text-[11px] group-hover:border-[#16A34A] transition-colors">
-              KAF
+          <div className="flex items-center gap-2">
+            <div 
+              onClick={() => setActiveScreen('cockpit')}
+              className="cursor-pointer group flex items-center"
+              title="KAF-INVENTAIRE | Complexe Agro-Industriel Kotama Agri-Food"
+            >
+              <KafLogo variant="horizontal" size="sm" showSubtitle={true} />
             </div>
-            <div className="flex items-center gap-2 font-bold tracking-wider text-white text-sm">
-              <span>KAF-INVENTAIRE</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] inline-block" title="Système opérationnel" />
-            </div>
+
+            {/* Quick Logo Management Button */}
+            <button
+              onClick={() => setIsLogoModalOpen(true)}
+              className="p-1 rounded bg-neutral-900 border border-neutral-800 hover:border-emerald-600 text-neutral-400 hover:text-emerald-400 transition-colors"
+              title={lang === 'ar' ? 'تخصيص وإدارة شعار المؤسسة (تحميل SVG/PNG)' : 'Gérer / Personnaliser le logo KAF (SVG/PNG)'}
+              aria-label="Logo settings"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-neutral-400 group-hover:text-emerald-400" />
+            </button>
+
             <span className="hidden sm:inline text-neutral-400 font-mono text-[11px] border-l border-neutral-800 pl-2">
               TRM-01
             </span>
@@ -197,6 +224,39 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
               <>
                 <WifiOff className="w-3.5 h-3.5 text-[#FACC15]" />
                 <span>{t.networkOffline}</span>
+              </>
+            )}
+          </button>
+
+          {/* Bouton Muet / Son Actif (Sound Mute / Unmute Toggle) */}
+          <button
+            onClick={() => {
+              const nextMuted = sound.toggleMute();
+              setIsMuted(nextMuted);
+              if (!nextMuted) {
+                sound.playTap();
+              }
+            }}
+            title={
+              isMuted
+                ? (lang === 'ar' ? 'تفعيل أصوات الأزرار (Alt+M)' : 'Activer les sons des boutons (Alt+M)')
+                : (lang === 'ar' ? 'كتم أصوات الأزرار بالكامل (Alt+M)' : 'Couper les sons des boutons (Alt+M)')
+            }
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-medium transition-colors ${
+              isMuted
+                ? 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:text-white hover:bg-neutral-800'
+                : 'bg-neutral-900 border-[#16A34A]/40 text-[#16A34A] hover:bg-neutral-800'
+            }`}
+          >
+            {isMuted ? (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-neutral-400" />
+                <span className="hidden sm:inline">{t.soundOff}</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-[#16A34A]" />
+                <span className="hidden sm:inline">{t.soundOn}</span>
               </>
             )}
           </button>
@@ -347,6 +407,13 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal de gestion et personnalisation du logo KAF */}
+      <LogoManagerModal 
+        isOpen={isLogoModalOpen} 
+        onClose={() => setIsLogoModalOpen(false)} 
+        lang={lang} 
+      />
     </header>
   );
 };

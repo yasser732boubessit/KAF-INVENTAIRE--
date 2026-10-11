@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120" fill="none">
+  <defs>
+    <linearGradient id="kafGreenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22C55E" />
+      <stop offset="100%" stop-color="#15803D" />
+    </linearGradient>
+    <linearGradient id="kafGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24" />
+      <stop offset="100%" stop-color="#D97706" />
+    </linearGradient>
+    <linearGradient id="kafDarkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+    <filter id="subtleGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#16A34A" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Left Emblem / Icon Shield -->
+  <g transform="translate(10, 10)">
+    <!-- Base geometric rounded container -->
+    <rect x="0" y="0" width="100" height="100" rx="20" fill="url(#kafDarkGrad)" stroke="#334155" stroke-width="2" />
+    
+    <!-- Agro Sprout / Leaves graphic -->
+    <!-- Left Leaf -->
+    <path d="M 50 50 C 35 45 28 30 35 18 C 45 15 52 25 50 50 Z" fill="url(#kafGreenGrad)" filter="url(#subtleGlow)" />
+    <!-- Right Leaf -->
+    <path d="M 50 48 C 65 40 74 26 66 14 C 54 13 47 24 50 48 Z" fill="#22C55E" />
+    <!-- Center Sprout Stem -->
+    <path d="M 50 54 Q 50 36 50 24" stroke="#86EFAC" stroke-width="2.5" stroke-linecap="round" />
+    
+    <!-- Central Golden Agro Grain Accent -->
+    <circle cx="50" cy="52" r="3.5" fill="url(#kafGoldGrad)" />
+
+    <!-- Stylized 'KAF' emblem lettering -->
+    <text x="50" y="86" text-anchor="middle" font-family="'Inter', 'Cairo', 'Segoe UI', sans-serif" font-weight="900" font-size="28" fill="#FFFFFF" letter-spacing="2">KAF</text>
+  </g>
+
+  <!-- Typography Right Section -->
+  <g transform="translate(125, 20)">
+    <!-- Main Acronym & Title -->
+    <text x="0" y="38" font-family="'Inter', 'Cairo', 'Segoe UI', sans-serif" font-weight="900" font-size="34" fill="#FFFFFF" letter-spacing="1.5">
+      KOTAMA
+    </text>
+    <text x="165" y="38" font-family="'Inter', 'Cairo', 'Segoe UI', sans-serif" font-weight="900" font-size="34" fill="#22C55E" letter-spacing="1.5">
+      AGRI-FOOD
+    </text>
+
+    <!-- Subtitle: Complex & Purpose -->
+    <text x="0" y="62" font-family="'Cairo', 'Inter', sans-serif" font-weight="700" font-size="12" fill="#94A3B8" letter-spacing="3">
+      COMPLEXE AGRO-INDUSTRIEL | كوتاما أغري فود
+    </text>
+
+    <!-- Operational System Tag -->
+    <g transform="translate(0, 72)">
+      <rect x="0" y="0" width="135" height="18" rx="4" fill="#16A34A" fill-opacity="0.2" stroke="#16A34A" stroke-width="1" />
+      <circle cx="9" cy="9" r="3" fill="#22C55E" />
+      <text x="18" y="13" font-family="'JetBrains Mono', monospace" font-size="10" font-weight="700" fill="#86EFAC" letter-spacing="1">
+        INVENTAIRE DES ACTIFS
+      </text>
+    </g>
+  </g>
+</svg>

@@ -192,7 +192,7 @@ export const translations = {
 
     // Scanner Terminal Screen
     scannerTitle: "Terminal de Scan Mobile & Caméra Réelle",
-    scannerSubtitle: "Prise en charge de la caméra de l'appareil (Webcam HTML5) et des scanners laser industriels",
+    scannerSubtitle: "Prise en charge du scanner HENEX HC-3206R (Bluetooth/2.4G/USB), caméra et étiquettes industrielles",
     useWebcamToggle: "Activer Caméra Réelle (Webcam)",
     webcamActive: "FLUX VIDÉO CAMÉRA ACTIF",
     laserBeamActive: "ÉMETTEUR LASER ACTIF",
@@ -203,6 +203,25 @@ export const translations = {
     scannedItemCard: "Fiche de Télémétrie de l'Actif",
     commitScan: "Valider la Détection",
     matchConfirmed: "CORRESPONDANCE IN SITU CONFIRMÉE",
+
+    // HENEX Scanner & Ticket Spec
+    henexScannerTitle: "Scanner HENEX HC-3206R-2D-BT (Sans Fil)",
+    scannerHardwareStatusReady: "SCANNER PRÊT (HID AUTO-CAPTURE)",
+    scannerHardwareStatusScanning: "RÉCEPTION DONNÉES EN COURS...",
+    scannerHardwareStatusMatched: "ÉTIQUETTE VÉRIFIÉE & CONFORME",
+    scannerHardwareStatusUnknown: "ÉTIQUETTE INCONNUE (NON ENREGISTRÉ)",
+    scannerHardwareConfigBtn: "Configuration Matériel HENEX",
+    scannerModeBluetooth: "Bluetooth Sans Fil (BT HID)",
+    scannerModeDongle: "Dongle USB 2.4GHz Sans Fil",
+    scannerModeUsbC: "Câble USB Filaire Direct",
+    testLenovoScanBtn: "Tester Étiquette Lenovo C24-20 (Image 2)",
+    ticketLenovoDetected: "Étiquette Lenovo Détectée (Format 1S / MTM / Serial)",
+    detectedSerialLabel: "N° Série Détecté",
+    detectedModelLabel: "Modèle & Spécifications",
+    detectedMtmLabel: "Code MTM",
+    detectedFruLabel: "Réf. FRU",
+    parsedFormatLabel: "Format du Ticket",
+    reconcileSuccessToast: "Immobilisation identifiée et rapprochée avec succès!",
 
     // Reports Screen
     reportsTitle: "Bordereau d'Audit & Certification Numérique Infalsifiable",
@@ -443,8 +462,8 @@ export const translations = {
     checklistSubtitle: "السيناريوهات الـ 9 الحرجة المطلوبة للتأكد من جاهزية النظام",
     testRunAction: "تشغيل واختبار السيناريو",
 
-    scannerTitle: "محطة المسح الميداني واستخدام الكاميرا الفعلية",
-    scannerSubtitle: "دعم كاميرا الجهاز المباشرة (Webcam) وأجهزة قراءة الباركود الليزرية الميدانية",
+    scannerTitle: "محطة المسح الميداني واستخدام الكاميرا وقارئ الباركود",
+    scannerSubtitle: "دعم قارئ الباركود اللاسلكي HENEX HC-3206R وقراءة تيكات وبيانات الأصول الصناعية",
     useWebcamToggle: "تشغيل كاميرا الجهاز الفعلية",
     webcamActive: "بث الكاميرا الحقيقية نشط",
     laserBeamActive: "شعاع الليزر نشط",
@@ -455,6 +474,25 @@ export const translations = {
     scannedItemCard: "بيانات الأصل الملتقط",
     commitScan: "اعتماد الرصد",
     matchConfirmed: "تطابق فعلي مؤكد",
+
+    // HENEX Scanner & Ticket Spec (Arabic)
+    henexScannerTitle: "قارئ الباركود اللاسلكي HENEX HC-3206R-2D-BT",
+    scannerHardwareStatusReady: "القارئ متصل وجاهز (التقاط تلقائي HID)",
+    scannerHardwareStatusScanning: "جاري استقبال البيانات...",
+    scannerHardwareStatusMatched: "تمت قراءة التيكاث ومطابقة الأصل بنجاح",
+    scannerHardwareStatusUnknown: "أصل غير مسجل في المنظومة",
+    scannerHardwareConfigBtn: "إعدادات جهاز HENEX",
+    scannerModeBluetooth: "بلوتوث لاسلكي (Bluetooth HID)",
+    scannerModeDongle: "مستقبل لاسلكي USB 2.4GHz Dongle",
+    scannerModeUsbC: "كابل USB سلكي مباشر",
+    testLenovoScanBtn: "تجربة مسح تيكاث شاشة Lenovo C24-20 (الصورة 2)",
+    ticketLenovoDetected: "تم التعرف على تيكاث Lenovo (تنسيق 1S / MTM / الرقم التسلسلي)",
+    detectedSerialLabel: "الرقم التسلسلي الملتقط",
+    detectedModelLabel: "الموديل والمواصفات",
+    detectedMtmLabel: "رمز MTM",
+    detectedFruLabel: "رقم FRU",
+    parsedFormatLabel: "تنسيق التيكاث / الكود",
+    reconcileSuccessToast: "تم التحقق ومطابقة الأصل في قاعدة البيانات بنجاح!",
 
     reportsTitle: "بيان المطابقة والاعتماد الرقمي الرسمي",
     reportsSubtitle: "استخراج تقارير التوفيق الصناعي والاعتماد الرقمي المؤمن",

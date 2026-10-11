@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Zap, 
   Lightbulb, 
@@ -6,15 +6,31 @@ import {
   RotateCw, 
   History, 
   Barcode, 
+  Camera, 
+  CameraOff, 
+  AlertTriangle, 
+  Plus,
+  Sliders,
+  Cpu,
+  Bluetooth,
+  Radio,
+  Usb,
+  Sparkles,
+  Info,
   Check,
-  Camera,
-  CameraOff,
-  AlertTriangle,
-  Plus
+  Search,
+  Monitor
 } from 'lucide-react';
 import { Asset, AssetCondition, Language } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { 
+  ScannerHardwareConfig, 
+  DEFAULT_SCANNER_CONFIG, 
+  ParsedTicketInfo, 
+  parseTicketData 
+} from '../utils/ticketParser';
+import { HenexConfigModal } from './HenexConfigModal';
 
 interface FieldScannerTerminalProps {
   assets: Asset[];
@@ -34,6 +50,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   lang
 }) => {
   const t = translations[lang];
+  const isAr = lang === 'ar';
 
   const [activeAsset, setActiveAsset] = useState<Asset | null>(assets[0] || null);
   const [torchActive, setTorchActive] = useState(false);
@@ -51,6 +68,35 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   // Unknown barcode detection popup
   const [unknownCodePrompt, setUnknownCodePrompt] = useState<string | null>(null);
 
+  // HENEX HC-3206R Hardware Scanner State & Configuration
+  const [scannerConfig, setScannerConfig] = useState<ScannerHardwareConfig>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_henex_scanner_cfg');
+      return saved ? JSON.parse(saved) : DEFAULT_SCANNER_CONFIG;
+    } catch {
+      return DEFAULT_SCANNER_CONFIG;
+    }
+  });
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [scannerHardwareStatus, setScannerHardwareStatus] = useState<'READY' | 'SCANNING' | 'MATCHED' | 'UNKNOWN'>('READY');
+  const [lastParsedTicket, setLastParsedTicket] = useState<ParsedTicketInfo | null>(null);
+  const [toastNotification, setToastNotification] = useState<string | null>(null);
+
+  // Persist scanner config
+  const handleSaveScannerConfig = (newCfg: ScannerHardwareConfig) => {
+    setScannerConfig(newCfg);
+    try {
+      localStorage.setItem('kaf_henex_scanner_cfg', JSON.stringify(newCfg));
+    } catch {}
+    showToast(isAr ? 'تم حفظ إعدادات قارئ HENEX بنجاح' : 'Configuration HENEX mise à jour');
+  };
+
+  const showToast = (msg: string) => {
+    setToastNotification(msg);
+    setTimeout(() => setToastNotification(null), 3500);
+  };
+
+  // WebCam setup
   useEffect(() => {
     let stream: MediaStream | null = null;
     if (useRealCamera) {
@@ -63,7 +109,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               videoRef.current.play();
             }
           })
-          .catch((err) => {
+          .catch((_err) => {
             setCameraError(
               lang === 'fr' 
                 ? "Caméra non accessible ou permissions requises. Utilisation du mode optique simulé." 
@@ -80,20 +126,133 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
     };
   }, [useRealCamera, lang]);
 
-  // Trigger barcode scan for a target asset
-  const triggerScanOnAsset = (target: Asset) => {
-    sound.playScanSuccess();
+  // Core reconciliation logic when asset is matched
+  const triggerScanOnAsset = useCallback((target: Asset, ticketInfo?: ParsedTicketInfo) => {
+    if (scannerConfig.soundBeepEnabled) {
+      sound.playScanSuccess();
+    }
     setScanLaserColor('green');
     setTimeout(() => setScanLaserColor('red'), 600);
 
     setActiveAsset(target);
     onReconcileAsset(target.id, currentScanningBay);
+    setScannerHardwareStatus('MATCHED');
 
     setRecentScans(prev => {
       const filtered = prev.filter(a => a.id !== target.id);
       return [target, ...filtered].slice(0, 5);
     });
-  };
+
+    if (ticketInfo) {
+      setLastParsedTicket(ticketInfo);
+    }
+    setUnknownCodePrompt(null);
+  }, [currentScanningBay, onReconcileAsset, scannerConfig.soundBeepEnabled]);
+
+  /**
+   * Process raw scan payload from HENEX HC-3206R or Camera or Manual entry
+   */
+  const processRawScan = useCallback((rawInput: string) => {
+    if (!rawInput || !rawInput.trim()) return;
+
+    setScannerHardwareStatus('SCANNING');
+    const parsed = parseTicketData(rawInput, scannerConfig);
+    setLastParsedTicket(parsed);
+
+    const query = parsed.cleanedCode.toLowerCase();
+    const querySerial = (parsed.detectedSerial || '').toLowerCase();
+    const queryBarcode = (parsed.cleanedCode || '').toLowerCase();
+
+    // Matching order:
+    // 1. Exact match on barcode (e.g. 1S62A8KAT1EUV5HND516 or 894102938102)
+    // 2. Exact match on serialNumber (e.g. V5HND516)
+    // 3. Exact match on asset id (e.g. AST-10502)
+    // 4. Substring search if Lenovo 1S format
+    let matchedAsset = assets.find(a => 
+      a.barcode.toLowerCase() === query ||
+      a.serialNumber.toLowerCase() === query ||
+      a.id.toLowerCase() === query
+    );
+
+    if (!matchedAsset && querySerial) {
+      matchedAsset = assets.find(a => a.serialNumber.toLowerCase() === querySerial);
+    }
+
+    if (!matchedAsset && parsed.format === 'LENOVO_1S') {
+      matchedAsset = assets.find(a => 
+        a.barcode.toLowerCase().includes(query) ||
+        (querySerial && a.serialNumber.toLowerCase() === querySerial) ||
+        a.name.toLowerCase().includes('lenovo') ||
+        a.notes.toLowerCase().includes('lenovo')
+      );
+    }
+
+    if (matchedAsset) {
+      triggerScanOnAsset(matchedAsset, parsed);
+      setUnknownCodePrompt(null);
+      showToast(
+        isAr 
+          ? `تم رصد التيكاث ومطابقة الأصل: ${matchedAsset.officialCode} (${matchedAsset.nameAr || matchedAsset.name})`
+          : `Ticket reconnu : ${matchedAsset.officialCode} - ${matchedAsset.name}`
+      );
+    } else {
+      // Unknown asset discovered! (Scenario 3)
+      if (scannerConfig.soundBeepEnabled) {
+        sound.playAlert();
+      }
+      setScannerHardwareStatus('UNKNOWN');
+      setUnknownCodePrompt(parsed.cleanedCode);
+    }
+  }, [assets, isAr, scannerConfig, triggerScanOnAsset]);
+
+  /**
+   * Global Hardware Scanner Keypress Capture Listener (HID Keyboard Emulation)
+   * HENEX HC-3206R sends keystrokes with 5-25ms intervals ending in Enter
+   */
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = 0;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in a modal or non-scanner input
+      const target = e.target as HTMLElement;
+      const isInput = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+      
+      // If user is focused on the manual input, let standard form submit handle it
+      if (isInput && target?.id === 'manual-scanner-input') {
+        return;
+      }
+
+      const now = Date.now();
+      const diff = now - lastKeyTime;
+      lastKeyTime = now;
+
+      // Enter key indicates end of barcode transmission from HENEX scanner
+      if (e.key === 'Enter') {
+        if (buffer.length >= scannerConfig.minBarcodeLength) {
+          e.preventDefault();
+          const scannedText = buffer;
+          buffer = '';
+          processRawScan(scannedText);
+        } else {
+          buffer = '';
+        }
+        return;
+      }
+
+      // If characters come rapidly (< timeout), it's the physical scanner
+      if (diff > scannerConfig.interCharTimeoutMs && buffer.length > 0) {
+        buffer = ''; // timeout reached, reset buffer
+      }
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [processRawScan, scannerConfig.interCharTimeoutMs, scannerConfig.minBarcodeLength]);
 
   // Run auto-sweep simulation
   const handleAutoSweep = () => {
@@ -117,23 +276,13 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualCode.trim()) return;
+    processRawScan(manualCode.trim());
+    setManualCode('');
+  };
 
-    const query = manualCode.trim().toLowerCase();
-    const match = assets.find(
-      a => a.barcode.toLowerCase() === query || 
-           a.serialNumber.toLowerCase() === query || 
-           a.id.toLowerCase() === query
-    );
-
-    if (match) {
-      triggerScanOnAsset(match);
-      setManualCode('');
-      setUnknownCodePrompt(null);
-    } else {
-      sound.playAlert();
-      // Trigger user requirement 3: Unknown asset -> Non Enregistré discovery prompt!
-      setUnknownCodePrompt(manualCode.trim());
-    }
+  // Quick 1-click test with the user's uploaded Lenovo C24-20 ticket from Image 2
+  const handleSimulateLenovoTicketScan = () => {
+    processRawScan('1S62A8KAT1EUV5HND516');
   };
 
   const getDisplayName = (item: Asset) => {
@@ -145,24 +294,40 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   return (
     <div className="flex-1 flex flex-col lg:flex-row bg-[#0B132B] text-slate-100 overflow-y-auto">
       {/* Handheld Viewfinder Viewport (Left/Top) */}
-      <div className="flex-1 p-4 lg:p-6 flex flex-col justify-between max-w-3xl mx-auto w-full">
+      <div className="flex-1 p-4 lg:p-6 flex flex-col justify-between max-w-4xl mx-auto w-full">
         {/* Terminal Header */}
         <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <h2 className="font-bold text-sm text-sky-400 font-mono-numbers uppercase tracking-wider">
-                {t.scannerTitle}
+              <span className={`w-2.5 h-2.5 rounded-full ${
+                scannerHardwareStatus === 'MATCHED' ? 'bg-emerald-400' :
+                scannerHardwareStatus === 'UNKNOWN' ? 'bg-amber-400' :
+                scannerHardwareStatus === 'SCANNING' ? 'bg-sky-400 animate-ping' :
+                'bg-emerald-400 animate-pulse'
+              }`} />
+              <h2 className="font-bold text-sm text-sky-400 font-mono-numbers uppercase tracking-wider flex items-center gap-2">
+                <span>{t.scannerTitle}</span>
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">{t.scannerSubtitle}</p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* HENEX HC-3206R Hardware Config Button */}
+            <button
+              onClick={() => setIsConfigModalOpen(true)}
+              className="px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 shadow-sm transition-all"
+              title={t.scannerHardwareConfigBtn}
+            >
+              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">HENEX HC-3206R</span>
+              <Sliders className="w-3 h-3 text-emerald-400" />
+            </button>
+
             {/* Real Camera (Webcam) Toggle */}
             <button
               onClick={() => setUseRealCamera(!useRealCamera)}
-              className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+              className={`px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition-all ${
                 useRealCamera 
                   ? 'bg-sky-600 border-sky-400 text-white shadow-lg shadow-sky-500/20' 
                   : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
@@ -175,19 +340,19 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             {/* Torch toggle */}
             <button
               onClick={() => setTorchActive(!torchActive)}
-              className={`p-2 rounded border transition-colors ${
+              className={`p-1.5 rounded border transition-colors ${
                 torchActive 
                   ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20' 
                   : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
               }`}
               title={t.flashTorch}
             >
-              <Lightbulb className="w-4 h-4" />
+              <Lightbulb className="w-3.5 h-3.5" />
             </button>
 
             {/* Current Auditing Location Selector */}
             <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs font-mono-numbers">
-              <span className="text-slate-400">BAIE TERRAIN:</span>
+              <span className="text-slate-400">{isAr ? 'الرف الميداني:' : 'BAIE:'}</span>
               <select
                 value={currentScanningBay}
                 onChange={(e) => onSetScanningBay(e.target.value)}
@@ -202,14 +367,60 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           </div>
         </div>
 
+        {/* HENEX Scanner Hardware Status Banner */}
+        <div className="my-2 p-2.5 bg-[#101F3B] border border-slate-700 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+              {scannerConfig.connectionMode === 'BLUETOOTH_WIRELESS' ? (
+                <Bluetooth className="w-4 h-4 text-sky-400" />
+              ) : scannerConfig.connectionMode === 'USB_DONGLE_2_4G' ? (
+                <Radio className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Usb className="w-4 h-4 text-amber-400" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-white font-mono">HENEX HC-3206R (S/FIL)</span>
+                <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-800">
+                  {scannerConfig.connectionMode === 'BLUETOOTH_WIRELESS' ? 'BT SANS FIL' : 
+                   scannerConfig.connectionMode === 'USB_DONGLE_2_4G' ? '2.4G DONGLE' : 'USB FILAIRE'}
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                {isAr 
+                  ? 'القارئ متصل وجاهز لالتقاط الباركود والتيكاث تلقائياً عند الضغط على الزناد' 
+                  : 'Scanner sans fil prêt. Appuyez sur la gâchette pour capturer l\'étiquette.'}
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Ticket Test Trigger Button */}
+          <button
+            onClick={handleSimulateLenovoTicketScan}
+            className="px-2.5 py-1.5 bg-sky-900/80 hover:bg-sky-800 text-sky-200 border border-sky-600 rounded text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+            title={t.testLenovoScanBtn}
+          >
+            <Monitor className="w-3.5 h-3.5 text-sky-400" />
+            <span>{isAr ? 'مسح تيكاث Lenovo C24-20 (تجربة)' : 'Tester Étiquette Lenovo (Image 2)'}</span>
+          </button>
+        </div>
+
         {cameraError && (
           <div className="my-2 p-2 bg-rose-950/80 border border-rose-800 text-rose-300 text-xs rounded">
             {cameraError}
           </div>
         )}
 
+        {toastNotification && (
+          <div className="my-2 p-2.5 bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs rounded flex items-center gap-2 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span>{toastNotification}</span>
+          </div>
+        )}
+
         {/* Optical Scanning Reticle & Camera Emulation / Live Stream */}
-        <div className="relative my-4 aspect-video sm:aspect-[16/10] bg-slate-950 rounded-lg border-2 border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group">
+        <div className="relative my-2 aspect-video sm:aspect-[16/9] bg-slate-950 rounded-lg border-2 border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group">
           {useRealCamera ? (
             <video
               ref={videoRef}
@@ -246,7 +457,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           )}
 
           {/* Industrial Viewfinder Crosshairs & Reticle */}
-          <div className="absolute inset-10 sm:inset-16 border border-sky-500/40 rounded flex flex-col justify-between p-3 pointer-events-none z-10">
+          <div className="absolute inset-10 sm:inset-14 border border-sky-500/40 rounded flex flex-col justify-between p-3 pointer-events-none z-10">
             <div className="flex justify-between">
               <span className="w-4 h-4 border-t-2 border-s-2 border-sky-400" />
               <span className="w-4 h-4 border-t-2 border-e-2 border-sky-400" />
@@ -257,12 +468,12 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
                 <div className="text-center">
                   <Barcode className="w-8 h-8 text-sky-400/80 mx-auto animate-pulse" />
                   <span className="text-[10px] font-mono-numbers text-sky-300 uppercase tracking-widest block mt-1">
-                    {useRealCamera ? t.webcamActive : t.laserBeamActive}
+                    {useRealCamera ? t.webcamActive : "HENEX 2D LASER SENSOR ACTIVE"}
                   </span>
                 </div>
               </div>
-              <span className="text-[11px] text-slate-400 bg-black/60 px-2.5 py-0.5 rounded font-mono-numbers">
-                {lang === 'fr' ? 'ALIGNER LE CODE DANS LE VISEUR' : lang === 'ar' ? 'قم بمحاذاة الرمز داخل المؤشر' : 'ALIGN TARGET INSIDE RETICLE'}
+              <span className="text-[11px] text-slate-300 bg-black/70 px-2.5 py-0.5 rounded font-mono-numbers border border-slate-700">
+                {isAr ? 'وجه شعاع القارئ HENEX نحو باركود التيكاث' : 'VISEZ L\'ÉTIQUETTE AVEC LE SCANNER HENEX'}
               </span>
             </div>
 
@@ -274,8 +485,8 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
 
           {/* Quick Trigger Button overlay */}
           <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center z-20">
-            <div className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded text-[11px] font-mono-numbers text-emerald-400 border border-emerald-900/60">
-              {useRealCamera ? "LIVE WEBCAM SENSOR ACTIVE" : "OPTICAL SIMULATOR: 60 FPS"}
+            <div className="bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded text-[11px] font-mono-numbers text-emerald-400 border border-emerald-900/60">
+              {useRealCamera ? "WEBCAM SENSOR ACTIVE" : "HENEX HC-3206R (HID KEYBOARD LISTEN)"}
             </div>
 
             <button
@@ -283,13 +494,54 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
                 const randomAsset = assets[Math.floor(Math.random() * assets.length)];
                 triggerScanOnAsset(randomAsset);
               }}
-              className="bg-[#0284C7] hover:bg-[#0369a1] text-white px-4 py-2 rounded font-bold text-xs shadow-lg flex items-center gap-1.5 active:scale-95 transition-all border border-sky-400/40"
+              className="bg-[#0284C7] hover:bg-[#0369a1] text-white px-3.5 py-1.5 rounded font-bold text-xs shadow-lg flex items-center gap-1.5 active:scale-95 transition-all border border-sky-400/40"
             >
-              <Zap className="w-4 h-4 fill-current" />
-              <span>{lang === 'fr' ? "Déclencher Scan In Situ" : "مسح الأصل الحالي"}</span>
+              <Zap className="w-3.5 h-3.5 fill-current" />
+              <span>{isAr ? "مسح الأصل الحالي" : "Déclencher Scan In Situ"}</span>
             </button>
           </div>
         </div>
+
+        {/* Detailed Parsed Ticket Inspection Card (If Ticket scanned) */}
+        {lastParsedTicket && (
+          <div className="my-2 p-3 bg-slate-900 border border-sky-600/70 rounded-lg text-xs space-y-2 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-sky-400" />
+                <span className="font-bold text-white">
+                  {lastParsedTicket.format === 'LENOVO_1S' 
+                    ? t.ticketLenovoDetected 
+                    : isAr ? 'معلومات التيكاث المقروءة' : 'Données Décodées de l\'Étiquette'}
+                </span>
+                <span className="text-[10px] bg-sky-950 text-sky-300 font-mono px-2 py-0.5 rounded border border-sky-800">
+                  {lastParsedTicket.format}
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-emerald-400">
+                Confiance: {Math.round(lastParsedTicket.confidence * 100)}%
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+              <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                <span className="text-slate-400 block text-[10px]">{t.detectedSerialLabel}:</span>
+                <span className="font-bold text-emerald-300">{lastParsedTicket.detectedSerial || 'N/A'}</span>
+              </div>
+              <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                <span className="text-slate-400 block text-[10px]">{t.detectedMtmLabel}:</span>
+                <span className="font-bold text-sky-300">{lastParsedTicket.detectedMtm || 'N/A'}</span>
+              </div>
+              <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                <span className="text-slate-400 block text-[10px]">{t.detectedFruLabel}:</span>
+                <span className="font-bold text-amber-300">{lastParsedTicket.detectedFru || 'N/A'}</span>
+              </div>
+              <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                <span className="text-slate-400 block text-[10px]">{t.detectedModelLabel}:</span>
+                <span className="font-bold text-white truncate block">{lastParsedTicket.detectedModel || 'Standard'}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Unknown Code Banner Alert (Scenario 3 from user prompt!) */}
         {unknownCodePrompt && (
@@ -297,9 +549,11 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
               <div>
-                <strong>Code Inconnu dans le Répertoire ERP ({unknownCodePrompt}) :</strong>
+                <strong>{isAr ? 'كود غير مسجل في منظومة الأصول' : 'Code Inconnu dans le Répertoire ERP'} ({unknownCodePrompt}) :</strong>
                 <p className="text-[11px] text-amber-300">
-                  Cet équipement a été trouvé physiquement mais n'existe pas dans le système. Enregistrez-le dans la liste des <strong>Actifs Non Enregistrés</strong>.
+                  {isAr 
+                    ? 'تم مسح هذه التيكاث فعلياً بواسطة قارئ HENEX لكنها غير مدرجة في السجلات الدفترية. أضفها في قائمة الأصول غير المسجلة.'
+                    : "Cet équipement a été scanné avec succès mais n'existe pas dans le système. Enregistrez-le dans la liste des Actifs Non Enregistrés."}
                 </p>
               </div>
             </div>
@@ -312,7 +566,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-bold text-xs flex items-center gap-1 flex-shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Créer Fiche Découverte</span>
+              <span>{isAr ? 'إنشاء بطاقة اكتشاف' : 'Créer Fiche Découverte'}</span>
             </button>
           </div>
         )}
@@ -324,9 +578,9 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             <div>
               <div className="text-xs font-bold text-slate-200">{t.rapidSweep}</div>
               <div className="text-[11px] text-slate-400">
-                {lang === 'fr' 
-                  ? "Tournée séquentielle haute cadence (5 actifs consécutifs)" 
-                  : "مسح متسلسل عالي السرعة (5 أصول متتالية)"}
+                {isAr 
+                  ? "جولة مسح متسلسلة عالية السرعة (5 أصول متتالية)" 
+                  : "Tournée séquentielle haute cadence (5 actifs consécutifs)"}
               </div>
             </div>
             <button
@@ -346,23 +600,24 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           {/* Manual Numeric Barcode Key-in */}
           <form onSubmit={handleManualSubmit} className="bg-[#131E3D] p-3 rounded border border-slate-800 flex gap-2">
             <input
+              id="manual-scanner-input"
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="Code-barres ou N° série (ex: 894102938104)..."
-              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono-numbers focus:outline-none focus:ring-1 focus:ring-sky-500"
+              placeholder={isAr ? "كود التيكاث أو الرقم التسلسلي (مثال: 1S62A8KAT1EUV5HND516)..." : "Code-barres ou N° série (ex: 1S62A8KAT1EUV5HND516)..."}
+              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
             />
             <button
               type="submit"
               className="bg-slate-800 hover:bg-slate-700 text-sky-400 px-3 py-1 rounded text-xs font-bold border border-slate-700"
             >
-              Tester
+              {isAr ? 'تجربة' : 'Tester'}
             </button>
           </form>
         </div>
 
         {/* Recent Scan History Buffer Roll */}
-        <div className="mt-4 pt-3 border-t border-slate-800">
+        <div className="mt-3 pt-3 border-t border-slate-800">
           <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2 font-mono-numbers">
             <History className="w-3.5 h-3.5 text-sky-400" />
             <span>{t.recentScans} ({recentScans.length})</span>
@@ -454,7 +709,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             <div className="grid grid-cols-2 gap-2 text-xs font-mono-numbers">
               <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
                 <span className="text-slate-500 text-[10px] block font-sans">Code-Barres:</span>
-                <span className="font-bold text-sky-300">{activeAsset.barcode}</span>
+                <span className="font-bold text-sky-300 truncate block">{activeAsset.barcode}</span>
               </div>
               <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
                 <span className="text-slate-500 text-[10px] block font-sans">N° de Série:</span>
@@ -484,6 +739,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
                 onClick={() => {
                   sound.playScanSuccess();
                   onReconcileAsset(activeAsset.id, currentScanningBay);
+                  showToast(isAr ? 'تم تأكيد واعتماد مسح الأصل بنجاح' : 'Scan confirmé et enregistré');
                 }}
                 className="w-full h-12 bg-[#0284C7] hover:bg-[#0369a1] text-white rounded font-bold text-sm shadow-xl flex items-center justify-center gap-2 active:scale-98 transition-all border border-sky-400"
               >
@@ -493,11 +749,23 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             </div>
           </div>
         ) : (
-          <div className="h-full flex items-center justify-center text-slate-500 text-xs">
-            Scannez un code-barres pour démarrer l'inspection
+          <div className="h-full flex items-center justify-center text-slate-500 text-xs text-center p-6">
+            <div>
+              <Barcode className="w-12 h-12 text-slate-600 mx-auto mb-2 animate-pulse" />
+              <span>{isAr ? "قم بتوجيه قارئ HENEX نحو تيكاث الأصل لبدء الفحص" : "Scannez une étiquette avec le lecteur HENEX pour démarrer"}</span>
+            </div>
           </div>
         )}
       </div>
+
+      {/* HENEX Hardware Configuration Modal */}
+      <HenexConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        config={scannerConfig}
+        onSaveConfig={handleSaveScannerConfig}
+        lang={lang}
+      />
     </div>
   );
 };

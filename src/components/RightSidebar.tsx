@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard,
   ScanLine,
@@ -14,11 +14,14 @@ import {
   ChevronLeft,
   Download,
   Terminal,
-  Activity
+  Activity,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { ActiveScreen, Language } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { KafLogo } from './KafLogo';
 
 interface RightSidebarProps {
   activeScreen: ActiveScreen;
@@ -56,6 +59,20 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       return false;
     }
   });
+  const [isMuted, setIsMuted] = useState<boolean>(sound.isMuted);
+
+  useEffect(() => {
+    const handleSoundChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ isMuted: boolean }>;
+      if (customEvent.detail) {
+        setIsMuted(customEvent.detail.isMuted);
+      } else {
+        setIsMuted(sound.isMuted);
+      }
+    };
+    window.addEventListener('kaf_sound_changed', handleSoundChange);
+    return () => window.removeEventListener('kaf_sound_changed', handleSoundChange);
+  }, []);
 
   const toggleCollapse = () => {
     const next = !isCollapsed;
@@ -142,31 +159,52 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       style={{ direction: 'ltr' }} // Keep sidebar layout strictly anchored on the right edge
       aria-label="Navigation principale KAF-INVENTAIRE"
     >
-      {/* Header with Title / Collapse Toggle */}
-      <div className="h-12 border-b border-neutral-800 flex items-center justify-between px-3 gap-2 shrink-0">
-        {!isCollapsed && (
-          <div className="flex items-center gap-2 overflow-hidden">
-            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse shrink-0" />
-            <span className="text-[11px] font-bold tracking-wider text-white uppercase truncate">
-              {t.navOverview}
-            </span>
+      {/* Header with Title / Logo / Collapse Toggle */}
+      <div className="h-12 border-b border-neutral-800 flex items-center justify-between px-2.5 gap-2 shrink-0">
+        {!isCollapsed ? (
+          <>
+            <div 
+              className="flex items-center gap-2 overflow-hidden cursor-pointer group"
+              onClick={() => setActiveScreen('cockpit')}
+              title="KAF-INVENTAIRE | Kotama Agri-Food"
+            >
+              <KafLogo variant="badge" size="xs" />
+              <div className="flex flex-col truncate">
+                <span className="text-[11px] font-bold tracking-wider text-white uppercase truncate leading-tight group-hover:text-emerald-400 transition-colors">
+                  KAF-INVENTAIRE
+                </span>
+                <span className="text-[9px] text-[#22C55E] font-mono leading-none">
+                  KOTAMA AGRI-FOOD
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={toggleCollapse}
+              className="p-1 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/80 transition-colors shrink-0"
+              title="Réduire la navigation"
+              aria-label="Réduire la navigation"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center justify-between w-full px-0.5">
+            <div 
+              className="cursor-pointer"
+              onClick={() => setActiveScreen('cockpit')}
+              title="KAF-INVENTAIRE | Kotama Agri-Food"
+            >
+              <KafLogo variant="badge" size="xs" />
+            </div>
+            <button 
+              onClick={toggleCollapse}
+              className="p-1 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              title="Développer la navigation"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
-
-        <button
-          onClick={toggleCollapse}
-          className={`p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/80 transition-colors ${
-            isCollapsed ? 'mx-auto' : ''
-          }`}
-          title={isCollapsed ? 'Développer la navigation' : 'Réduire la navigation'}
-          aria-label={isCollapsed ? 'Développer la navigation' : 'Réduire la navigation'}
-        >
-          {isCollapsed ? (
-            <ChevronLeft className="w-4 h-4" />
-          ) : (
-            <ChevronRight className="w-4 h-4" />
-          )}
-        </button>
       </div>
 
       {/* Nav Items List */}
@@ -289,7 +327,21 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 <Terminal className="w-3 h-3" />
                 <span>TRM-01</span>
               </span>
-              <span>v4.2.0 Win64</span>
+              <button
+                onClick={() => {
+                  const next = sound.toggleMute();
+                  setIsMuted(next);
+                  if (!next) sound.playTap();
+                }}
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                  isMuted ? 'text-neutral-400 hover:text-white bg-neutral-900 border border-neutral-800' : 'text-[#16A34A] hover:text-white bg-[#16A34A]/10 border border-[#16A34A]/30'
+                }`}
+                title={isMuted ? (lang === 'ar' ? 'تشغيل أصوات الأزرار (Alt+M)' : 'Activer les sons (Alt+M)') : (lang === 'ar' ? 'كتم أصوات الأزرار (Alt+M)' : 'Couper les sons (Alt+M)')}
+              >
+                {isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                <span className="text-[9px]">{isMuted ? t.soundOff : t.soundOn}</span>
+              </button>
+              <span>v4.2.0</span>
             </div>
           </div>
         ) : (
@@ -300,6 +352,19 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               title={isElectron ? 'SQLite Windows Natif' : 'IndexedDB SQLite Moteur'}
             >
               <HardDrive className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                const next = sound.toggleMute();
+                setIsMuted(next);
+                if (!next) sound.playTap();
+              }}
+              className={`p-1.5 rounded transition-colors ${
+                isMuted ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-[#16A34A] hover:bg-neutral-800'
+              }`}
+              title={isMuted ? (lang === 'ar' ? 'تشغيل أصوات الأزرار (Alt+M)' : 'Activer les sons (Alt+M)') : (lang === 'ar' ? 'كتم أصوات الأزرار (Alt+M)' : 'Couper les sons (Alt+M)')}
+            >
+              {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
             </button>
             {onQuickBackup && (
               <button

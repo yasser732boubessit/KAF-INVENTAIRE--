@@ -12,6 +12,7 @@ import {
 import { Asset, Language } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { KafLogo } from './KafLogo';
 
 interface AuditReportManifestProps {
   assets: Asset[];
@@ -144,16 +145,19 @@ export const AuditReportManifest: React.FC<AuditReportManifestProps> = ({
       {/* Manifest Header */}
       <div className="bg-white border border-[#CBD5E1] rounded-lg p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono-numbers font-bold text-xs bg-slate-900 text-sky-400 px-2 py-0.5 rounded">
-                AUD-CERT-2026-Q1
-              </span>
-              <h1 className="font-bold text-lg text-slate-900">
-                {t.reportsTitle}
-              </h1>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <KafLogo variant="print" size="md" />
+            <div className="sm:border-l sm:border-slate-300 sm:pl-4">
+              <div className="flex items-center gap-2">
+                <span className="font-mono-numbers font-bold text-xs bg-slate-900 text-sky-400 px-2 py-0.5 rounded">
+                  AUD-CERT-2026-Q1
+                </span>
+                <h1 className="font-bold text-lg text-slate-900">
+                  {t.reportsTitle}
+                </h1>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">{t.reportsSubtitle}</p>
             </div>
-            <p className="text-xs text-slate-500 mt-1">{t.reportsSubtitle}</p>
           </div>
 
           <div className="flex items-center gap-2">

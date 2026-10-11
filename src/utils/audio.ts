@@ -4,6 +4,36 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   public isMuted: boolean = false;
 
+  constructor() {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('kaf_sound_muted');
+        if (saved !== null) {
+          this.isMuted = saved === 'true';
+        }
+      } catch {
+        // localStorage unavailable or restricted
+      }
+    }
+  }
+
+  public setMuted(muted: boolean): boolean {
+    this.isMuted = muted;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('kaf_sound_muted', String(muted));
+        window.dispatchEvent(new CustomEvent('kaf_sound_changed', { detail: { isMuted: muted } }));
+      } catch {
+        // Ignore storage error
+      }
+    }
+    return this.isMuted;
+  }
+
+  public toggleMute(): boolean {
+    return this.setMuted(!this.isMuted);
+  }
+
   private initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;

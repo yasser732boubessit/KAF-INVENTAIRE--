@@ -278,6 +278,33 @@ export const initialAssets: Asset[] = [
     imageUrl: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80",
     weightKg: 15.4,
     calibrationDueDate: "2027-09-01"
+  },
+  {
+    id: "AST-10502",
+    officialCode: "IMMO-2026-00502",
+    name: "Lenovo ThinkVision C24-20 Industrial Workstation Monitor",
+    nameAr: "شاشة محطة التحكم والمراقبة الصناعية Lenovo C24-20",
+    nameFr: "Moniteur de poste de supervision Lenovo C24-20 (Type A20238FD0)",
+    sku: "SKU-IT-C2420",
+    serialNumber: "V5HND516",
+    barcode: "1S62A8KAT1EUV5HND516",
+    rfidTag: "E280-1160-2000-0924",
+    category: "Automation",
+    zone: "WEST-DC-ZONE-C",
+    expectedBayLocation: "BAY-04-RACK-02-L1",
+    scannedBayLocation: undefined,
+    inventoryStatus: "NON_VERIFIE",
+    condition: "nominal",
+    tamperSealIntact: true,
+    rfidVerified: true,
+    serialVerified: true,
+    lastScannedAt: null,
+    scannedBy: null,
+    notes: "Moniteur LCD 23.8 pouces FHD. MTM: 62A8-KAR1-WW. FRU: 5D10290290. Fabriqué le 2022.07.12.",
+    notesFr: "Moniteur LCD 23.8 pouces FHD. MTM: 62A8-KAR1-WW. FRU: 5D10290290. Fabriqué le 2022.07.12.",
+    imageUrl: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80",
+    weightKg: 3.01,
+    calibrationDueDate: "2027-12-31"
   }
 ];
 
