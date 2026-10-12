@@ -724,24 +724,71 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Rôle Attribué (Profil Opérationnel) *
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  {lang === 'ar' ? 'الدور والصلاحية الممنوحة (Profil Opérationnel) *' : 'Rôle Attribué (Profil Opérationnel) *'}
                 </label>
-                <select
-                  value={formRole}
-                  onChange={(e) => setFormRole(e.target.value as UserRole)}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-purple-600 focus:outline-none bg-white font-medium"
-                >
-                  <option value="AGENT_INVENTAIRE">
-                    Rôle 2 : Agent d'Ajout / Identification (Terrain)
-                  </option>
-                  <option value="CONTROLEUR_ZONE">
-                    Rôle 3 : Agent de Vérification / Chargement
-                  </option>
-                  <option value="RESPONSABLE_PATRIMOINE">
-                    Rôle 1 : Administrateur / Responsable du Patrimoine
-                  </option>
-                </select>
+                
+                {/* Visual Role Cards Selector */}
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    {
+                      id: 'AGENT_INVENTAIRE' as UserRole,
+                      titleFr: "Rôle 2 : Agent d'Ajout / Identification (Terrain)",
+                      titleAr: "الدور 2: وكيل الإضافة والتعريف الميداني",
+                      descFr: "إضافة أصول جديدة، مسح الباركود الأولي، طباعة تيكات الترقيم، تسجيل المكتشفات.",
+                      badge: "bg-emerald-100 text-emerald-900 border-emerald-300",
+                      icon: "🏷️"
+                    },
+                    {
+                      id: 'CONTROLEUR_ZONE' as UserRole,
+                      titleFr: "Rôle 3 : Agent de Vérification / Chargement",
+                      titleAr: "الدور 3: وكيل الفحص والمطابقة والتحميل",
+                      descFr: "الفحص الميداني الفيزيائي، مراقبة الشحن، رصد فروق الأماكن، تدقيق المطابقة.",
+                      badge: "bg-sky-100 text-sky-900 border-sky-300",
+                      icon: "🔍"
+                    },
+                    {
+                      id: 'RESPONSABLE_PATRIMOINE' as UserRole,
+                      titleFr: "Rôle 1 : Administrateur / Responsable du Patrimoine",
+                      titleAr: "الدور 1: المدير العام / مسؤول إدارة الأصول",
+                      descFr: "صلاحيات كلية: إنشاء الحسابات وتوزيع الأدوار، قفل الحملات، النسخ الاحتياطي، اعتماد المكتشفات.",
+                      badge: "bg-purple-100 text-purple-900 border-purple-300",
+                      icon: "👑"
+                    }
+                  ].map((roleOption) => {
+                    const isSelected = formRole === roleOption.id;
+                    return (
+                      <div
+                        key={roleOption.id}
+                        onClick={() => { setFormRole(roleOption.id); sound.playTap(); }}
+                        className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-purple-50/80 border-purple-600 ring-2 ring-purple-600/30'
+                            : 'bg-white border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{roleOption.icon}</span>
+                            <span className="font-bold text-xs text-slate-900">
+                              {lang === 'ar' ? roleOption.titleAr : roleOption.titleFr}
+                            </span>
+                          </div>
+                          <input
+                            type="radio"
+                            name="assignedRole"
+                            checked={isSelected}
+                            onChange={() => setFormRole(roleOption.id)}
+                            className="accent-purple-600"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                          {roleOption.descFr}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-1">
@@ -839,24 +886,58 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Rôle Opérationnel
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  {lang === 'ar' ? 'تعديل الدور والصلاحية (Réaffecter le Rôle)' : 'Réaffecter le Rôle Opérationnel'}
                 </label>
-                <select
-                  value={formRole}
-                  onChange={(e) => setFormRole(e.target.value as UserRole)}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-purple-600 focus:outline-none bg-white font-medium"
-                >
-                  <option value="AGENT_INVENTAIRE">
-                    Rôle 2 : Agent d'Ajout / Identification (Terrain)
-                  </option>
-                  <option value="CONTROLEUR_ZONE">
-                    Rôle 3 : Agent de Vérification / Chargement
-                  </option>
-                  <option value="RESPONSABLE_PATRIMOINE">
-                    Rôle 1 : Administrateur / Responsable du Patrimoine
-                  </option>
-                </select>
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    {
+                      id: 'AGENT_INVENTAIRE' as UserRole,
+                      titleFr: "Rôle 2 : Agent d'Ajout / Identification",
+                      titleAr: "الدور 2: وكيل الإضافة والتعريف",
+                      icon: "🏷️"
+                    },
+                    {
+                      id: 'CONTROLEUR_ZONE' as UserRole,
+                      titleFr: "Rôle 3 : Agent de Vérification / Chargement",
+                      titleAr: "الدور 3: وكيل الفحص والشحن",
+                      icon: "🔍"
+                    },
+                    {
+                      id: 'RESPONSABLE_PATRIMOINE' as UserRole,
+                      titleFr: "Rôle 1 : Administrateur / Responsable du Patrimoine",
+                      titleAr: "الدور 1: المدير العام / مسؤول الأصول",
+                      icon: "👑"
+                    }
+                  ].map((roleOption) => {
+                    const isSelected = formRole === roleOption.id;
+                    return (
+                      <div
+                        key={roleOption.id}
+                        onClick={() => { setFormRole(roleOption.id); sound.playTap(); }}
+                        className={`p-2 rounded border cursor-pointer flex items-center justify-between transition-all ${
+                          isSelected
+                            ? 'bg-sky-50 border-sky-600 ring-2 ring-sky-600/30 font-bold'
+                            : 'bg-white border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{roleOption.icon}</span>
+                          <span className="text-xs text-slate-900">
+                            {lang === 'ar' ? roleOption.titleAr : roleOption.titleFr}
+                          </span>
+                        </div>
+                        <input
+                          type="radio"
+                          name="editRole"
+                          checked={isSelected}
+                          onChange={() => setFormRole(roleOption.id)}
+                          className="accent-sky-600"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
