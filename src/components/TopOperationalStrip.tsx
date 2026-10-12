@@ -265,38 +265,63 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
           <div className="relative">
             <button
               onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
-              className="flex items-center gap-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 px-2 py-1 rounded text-[11px] text-white transition-colors"
-              title="Changer de langue / تغيير اللغة"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                isLangMenuOpen 
+                  ? 'bg-neutral-800 border-emerald-500 text-white' 
+                  : 'bg-neutral-900 hover:bg-neutral-800 border-neutral-700 text-neutral-200 hover:text-white'
+              }`}
+              title={lang === 'ar' ? 'تغيير اللغة (العربية / Français / English)' : 'Changer de langue / Switch Language'}
+              aria-label="Language selector"
             >
-              <Languages className="w-3.5 h-3.5 text-neutral-400" />
-              <span className="font-semibold uppercase">{lang}</span>
+              <Languages className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-bold font-mono tracking-wider">
+                {lang === 'ar' ? 'العربية' : lang === 'fr' ? 'FR' : 'EN'}
+              </span>
               <ChevronDown className="w-3 h-3 text-neutral-400" />
             </button>
 
             {isLangMenuOpen && (
-              <div className="absolute right-0 mt-1 w-28 bg-neutral-900 border border-neutral-700 rounded shadow-lg py-1 z-50 text-xs">
-                <button
-                  onClick={() => { setLang('fr'); setIsLangMenuOpen(false); sound.playTap(); }}
-                  className={`w-full text-left px-3 py-1.5 hover:bg-neutral-800 flex items-center justify-between ${lang === 'fr' ? 'text-[#16A34A] font-bold' : 'text-white'}`}
-                >
-                  <span>Français</span>
-                  {lang === 'fr' && <span className="text-[#16A34A]">✓</span>}
-                </button>
-                <button
-                  onClick={() => { setLang('ar'); setIsLangMenuOpen(false); sound.playTap(); }}
-                  className={`w-full text-left px-3 py-1.5 hover:bg-neutral-800 flex items-center justify-between ${lang === 'ar' ? 'text-[#16A34A] font-bold' : 'text-white'}`}
-                >
-                  <span>العربية</span>
-                  {lang === 'ar' && <span className="text-[#16A34A]">✓</span>}
-                </button>
-                <button
-                  onClick={() => { setLang('en'); setIsLangMenuOpen(false); sound.playTap(); }}
-                  className={`w-full text-left px-3 py-1.5 hover:bg-neutral-800 flex items-center justify-between ${lang === 'en' ? 'text-[#16A34A] font-bold' : 'text-white'}`}
-                >
-                  <span>English</span>
-                  {lang === 'en' && <span className="text-[#16A34A]">✓</span>}
-                </button>
-              </div>
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setIsLangMenuOpen(false)} 
+                />
+                <div className="absolute right-0 rtl:right-auto rtl:left-0 mt-1.5 w-36 bg-neutral-900 border border-neutral-700 rounded-md shadow-2xl py-1 z-50 text-xs">
+                  <div className="px-3 py-1 text-[10px] uppercase font-semibold text-neutral-400 border-b border-neutral-800">
+                    {lang === 'ar' ? 'اختر اللغة' : 'Choisir la langue'}
+                  </div>
+                  <button
+                    onClick={() => { setLang('ar'); setIsLangMenuOpen(false); sound.playTap(); }}
+                    className={`w-full text-right rtl:text-right ltr:text-left px-3 py-2 hover:bg-neutral-800 flex items-center justify-between transition-colors ${lang === 'ar' ? 'text-emerald-400 font-bold bg-neutral-800/60' : 'text-neutral-200'}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>🇩🇿</span>
+                      <span>العربية (RTL)</span>
+                    </span>
+                    {lang === 'ar' && <span className="text-emerald-400 text-xs">✓</span>}
+                  </button>
+                  <button
+                    onClick={() => { setLang('fr'); setIsLangMenuOpen(false); sound.playTap(); }}
+                    className={`w-full text-left rtl:text-right ltr:text-left px-3 py-2 hover:bg-neutral-800 flex items-center justify-between transition-colors ${lang === 'fr' ? 'text-emerald-400 font-bold bg-neutral-800/60' : 'text-neutral-200'}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>🇫🇷</span>
+                      <span>Français (LTR)</span>
+                    </span>
+                    {lang === 'fr' && <span className="text-emerald-400 text-xs">✓</span>}
+                  </button>
+                  <button
+                    onClick={() => { setLang('en'); setIsLangMenuOpen(false); sound.playTap(); }}
+                    className={`w-full text-left rtl:text-right ltr:text-left px-3 py-2 hover:bg-neutral-800 flex items-center justify-between transition-colors ${lang === 'en' ? 'text-emerald-400 font-bold bg-neutral-800/60' : 'text-neutral-200'}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>🇬🇧</span>
+                      <span>English</span>
+                    </span>
+                    {lang === 'en' && <span className="text-emerald-400 text-xs">✓</span>}
+                  </button>
+                </div>
+              </>
             )}
           </div>
 

@@ -19,7 +19,8 @@ import {
   Info,
   Check,
   Search,
-  Monitor
+  Monitor,
+  Printer
 } from 'lucide-react';
 import { Asset, AssetCondition, Language } from '../types';
 import { translations } from '../translations';
@@ -31,6 +32,8 @@ import {
   parseTicketData 
 } from '../utils/ticketParser';
 import { HenexConfigModal } from './HenexConfigModal';
+import { TicketPrintModal } from './TicketPrintModal';
+import { TicketData } from './PhysicalAssetTag';
 
 interface FieldScannerTerminalProps {
   assets: Asset[];
@@ -81,6 +84,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   const [scannerHardwareStatus, setScannerHardwareStatus] = useState<'READY' | 'SCANNING' | 'MATCHED' | 'UNKNOWN'>('READY');
   const [lastParsedTicket, setLastParsedTicket] = useState<ParsedTicketInfo | null>(null);
   const [toastNotification, setToastNotification] = useState<string | null>(null);
+  const [scannerPrintTickets, setScannerPrintTickets] = useState<TicketData[] | null>(null);
 
   // Persist scanner config
   const handleSaveScannerConfig = (newCfg: ScannerHardwareConfig) => {
@@ -557,17 +561,41 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => {
-                if (onOpenDiscoveryModalWithCode) {
-                  onOpenDiscoveryModalWithCode(unknownCodePrompt);
-                }
-              }}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-bold text-xs flex items-center gap-1 flex-shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{isAr ? 'إنشاء بطاقة اكتشاف' : 'Créer Fiche Découverte'}</span>
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => {
+                  sound.playTap();
+                  setScannerPrintTickets([{
+                    tagNumber: `DISCOV-2026-${Math.floor(100 + Math.random() * 899)}`,
+                    barcode: unknownCodePrompt,
+                    serialNumber: lastParsedTicket?.detectedSerial || 'SN-UNKNOWN',
+                    description: lastParsedTicket?.detectedModel ? `Équipement ${lastParsedTicket.detectedModel}` : 'Matériel inconnu constaté in-situ',
+                    location: currentScanningBay,
+                    date: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                    operator: 'TECH-941',
+                    statusText: 'ACTIF NON ENREGISTRÉ (BALISAGE IN-SITU)',
+                    category: 'ÉQUIPEMENT INDUSTRIEL'
+                  }]);
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow transition-colors"
+                title={isAr ? 'طباعة تيكات فورية لهذا الأصل غير المسجل' : 'Imprimer une étiquette de balisage immédiate'}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>{isAr ? 'طباعة التيكات فورا' : 'Imprimer Étiquette'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onOpenDiscoveryModalWithCode) {
+                    onOpenDiscoveryModalWithCode(unknownCodePrompt);
+                  }
+                }}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-bold text-xs flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isAr ? 'إنشاء بطاقة اكتشاف' : 'Créer Fiche Découverte'}</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -733,8 +761,8 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               </div>
             )}
 
-            {/* One-Thumb Big Confirm Button (44px target) */}
-            <div className="pt-2">
+            {/* Action Buttons: Confirm scan & Re-print ticket */}
+            <div className="pt-2 space-y-2">
               <button
                 onClick={() => {
                   sound.playScanSuccess();
@@ -745,6 +773,28 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               >
                 <CheckCircle2 className="w-5 h-5 text-white" />
                 <span>{t.commitScan} &bull; {activeAsset.id}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  sound.playTap();
+                  setScannerPrintTickets([{
+                    tagNumber: activeAsset.officialCode || activeAsset.id,
+                    barcode: activeAsset.barcode,
+                    serialNumber: activeAsset.serialNumber,
+                    description: isAr ? (activeAsset.nameAr || activeAsset.name) : activeAsset.name,
+                    location: activeAsset.expectedBayLocation || currentScanningBay,
+                    date: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                    operator: 'TECH-941',
+                    statusText: 'ÉTIQUETTE OFFICIELLE D\'IMMOBILISATION',
+                    category: activeAsset.category
+                  }]);
+                }}
+                className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition-colors"
+                title={isAr ? 'طباعة ملصق تيكات لهذا الأصل (لتعويض الملصقات التالفة)' : 'Réimprimer l\'étiquette physique pour cet actif'}
+              >
+                <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{isAr ? 'طباعة / تعويض تيكات الأصل' : 'Imprimer / Remplacer l\'Étiquette'}</span>
               </button>
             </div>
           </div>
@@ -766,6 +816,16 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
         onSaveConfig={handleSaveScannerConfig}
         lang={lang}
       />
+
+      {/* 🖨️ Physical Ticket Print Studio Modal */}
+      {scannerPrintTickets && (
+        <TicketPrintModal
+          isOpen={true}
+          onClose={() => setScannerPrintTickets(null)}
+          tickets={scannerPrintTickets}
+          lang={lang}
+        />
+      )}
     </div>
   );
 };

@@ -12,11 +12,14 @@ import {
   MapPin, 
   HelpCircle,
   Check,
-  X
+  X,
+  Printer
 } from 'lucide-react';
 import { DiscoveredAsset, Asset, UserRole, Language } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { TicketPrintModal } from './TicketPrintModal';
+import { TicketData } from './PhysicalAssetTag';
 
 interface UnregisteredDiscoveriesViewProps {
   discoveries: DiscoveredAsset[];
@@ -48,6 +51,23 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
   const [selectedForReject, setSelectedForReject] = useState<DiscoveredAsset | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  // Ticket Printing Modal state
+  const [printModalTickets, setPrintModalTickets] = useState<TicketData[] | null>(null);
+  const [autoPrintAfterCreate, setAutoPrintAfterCreate] = useState(true);
+
+  // Helper: Convert DiscoveredAsset to TicketData
+  const convertToTicket = (item: DiscoveredAsset): TicketData => ({
+    tagNumber: item.temporaryTag,
+    barcode: item.barcode,
+    serialNumber: item.serialNumber,
+    description: item.description,
+    location: item.foundLocation,
+    date: item.foundAt,
+    operator: item.foundBy,
+    statusText: 'ACTIF NON ENREGISTRÉ (BALISAGE IN-SITU)',
+    category: 'ÉQUIPEMENT INDUSTRIEL'
+  });
+
   // New discovery form state
   const [tempDesc, setTempDesc] = useState('');
   const [tempSerial, setTempSerial] = useState('');
@@ -75,6 +95,10 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
     setTempDesc('');
     setTempSerial('');
     setTempBarcode('');
+
+    if (autoPrintAfterCreate) {
+      setPrintModalTickets([convertToTicket(newDec)]);
+    }
   };
 
   const handleConfirmMatch = () => {
@@ -113,6 +137,19 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                sound.playTap();
+                setPrintModalTickets(discoveries.map(convertToTicket));
+              }}
+              disabled={discoveries.length === 0}
+              className="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white px-3.5 py-2 rounded text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+              title={lang === 'ar' ? 'طباعة جميع تيكات الأصول المكتشفة دفعة واحدة' : 'Imprimer la planche complète de toutes les étiquettes'}
+            >
+              <Printer className="w-4 h-4 text-emerald-200" />
+              <span>{lang === 'ar' ? 'طباعة كل التيكات (دفعة كاملة)' : 'Imprimer Tout le Lot'}</span>
+            </button>
+
             <button
               onClick={() => setIsNewModalOpen(true)}
               className="bg-[#0F172A] hover:bg-slate-800 text-white px-3.5 py-2 rounded text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
@@ -252,6 +289,19 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                   </button>
                 </div>
               )}
+
+              {/* 🖨️ Bouton d'impression de l'étiquette physique (Balisage) */}
+              <button
+                onClick={() => {
+                  sound.playTap();
+                  setPrintModalTickets([convertToTicket(item)]);
+                }}
+                className="w-full mt-2.5 py-1.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-700 shadow-sm transition-all hover:border-emerald-500"
+                title={lang === 'ar' ? 'طباعة تيكات الباركود الفعلي لهذا الأصل' : 'Imprimer l\'étiquette de balisage physique (Code-128 & QR)'}
+              >
+                <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{lang === 'ar' ? 'طباعة التيكات (Code-128 / QR)' : 'Imprimer l\'Étiquette (Balisage)'}</span>
+              </button>
             </div>
           );
         })}
@@ -417,6 +467,24 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                 />
               </div>
 
+              {/* Option to automatically open print modal */}
+              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-emerald-950 block">
+                    {lang === 'ar' ? 'طباعة التيكات فوراً بعد الحفظ' : 'Imprimer l\'étiquette immédiatement'}
+                  </span>
+                  <span className="text-[10px] text-emerald-700">
+                    {lang === 'ar' ? 'فتح استوديو الطباعة للصق الملصق على المعدة مباشرة' : 'Génère le Code-128 et QR Code pour collage immédiat'}
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={autoPrintAfterCreate}
+                  onChange={(e) => setAutoPrintAfterCreate(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 bg-white border-emerald-300"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-2 border-t">
                 <button
                   type="button"
@@ -435,6 +503,16 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
             </form>
           </div>
         </div>
+      )}
+
+      {/* 🖨️ Physical Ticket Print Studio Modal */}
+      {printModalTickets && (
+        <TicketPrintModal
+          isOpen={true}
+          onClose={() => setPrintModalTickets(null)}
+          tickets={printModalTickets}
+          lang={lang}
+        />
       )}
     </div>
   );

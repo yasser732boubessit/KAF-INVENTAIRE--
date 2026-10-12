@@ -12,11 +12,14 @@ import {
   Edit3, 
   ExternalLink, 
   Check,
-  Clock
+  Clock,
+  Printer
 } from 'lucide-react';
 import { Asset, AssetCondition, InventoryResultStatus, Language } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { TicketPrintModal } from './TicketPrintModal';
+import { TicketData } from './PhysicalAssetTag';
 
 interface AssetInspectorProps {
   asset: Asset | null;
@@ -34,6 +37,7 @@ export const AssetInspector: React.FC<AssetInspectorProps> = ({
   const t = translations[lang];
   const [localNotes, setLocalNotes] = useState('');
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [printTicketData, setPrintTicketData] = useState<TicketData[] | null>(null);
 
   useEffect(() => {
     if (asset) {
@@ -204,6 +208,28 @@ export const AssetInspector: React.FC<AssetInspectorProps> = ({
             <div className="font-mono text-[12px] font-bold text-slate-800 tracking-widest mt-1">
               *{asset.barcode}*
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                sound.playTap();
+                setPrintTicketData([{
+                  tagNumber: asset.officialCode || asset.id,
+                  barcode: asset.barcode,
+                  serialNumber: asset.serialNumber,
+                  description: lang === 'ar' ? (asset.nameAr || asset.name) : asset.name,
+                  location: asset.scannedBayLocation || asset.expectedBayLocation,
+                  date: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                  operator: 'TECH-941',
+                  statusText: 'ÉTIQUETTE OFFICIELLE D\'IMMOBILISATION',
+                  category: asset.category
+                }]);
+              }}
+              className="w-full mt-2 py-1.5 px-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors border border-slate-700 shadow-sm"
+              title={lang === 'ar' ? 'طباعة بطاقة الباركود الصناعية لهذا الأصل' : 'Imprimer l\'étiquette d\'inventaire physique'}
+            >
+              <Printer className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{lang === 'ar' ? 'طباعة التيكات (Code-128 & QR)' : 'Imprimer l\'Étiquette Physique'}</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
@@ -453,6 +479,16 @@ export const AssetInspector: React.FC<AssetInspectorProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 🖨️ Physical Ticket Print Studio Modal */}
+      {printTicketData && (
+        <TicketPrintModal
+          isOpen={true}
+          onClose={() => setPrintTicketData(null)}
+          tickets={printTicketData}
+          lang={lang}
+        />
       )}
     </aside>
   );
