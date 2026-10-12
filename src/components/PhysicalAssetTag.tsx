@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import JsBarcode from 'jsbarcode';
-import QRCode from 'qrcode';
+import React from 'react';
 import { KafLogo } from './KafLogo';
+import { PureCode128Svg, PureQrSvg } from '../utils/pureBarcode';
 
 export interface TicketData {
   tagNumber: string;        // e.g. DISCOV-2026-402 or IMMO-2026-00502
@@ -30,61 +29,13 @@ export const PhysicalAssetTag: React.FC<PhysicalAssetTagProps> = ({
   showBarcode = true,
   showLogo = true
 }) => {
-  const barcodeSvgRef = useRef<SVGSVGElement | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
-
-  // Generate standard Code-128 barcode
-  useEffect(() => {
-    if (barcodeSvgRef.current && showBarcode && data.barcode) {
-      try {
-        JsBarcode(barcodeSvgRef.current, data.barcode, {
-          format: 'CODE128',
-          width: format === 'thermal_50x30' ? 1.4 : 1.7,
-          height: format === 'thermal_50x30' ? 32 : 42,
-          displayValue: true,
-          fontSize: 10,
-          font: 'monospace',
-          textMargin: 2,
-          margin: 0,
-          lineColor: '#000000',
-          background: '#ffffff'
-        });
-      } catch (err) {
-        console.error('Failed to generate Code128 barcode:', err);
-      }
-    }
-  }, [data.barcode, format, showBarcode]);
-
-  // Generate 2D QR Code
-  useEffect(() => {
-    if (showQr) {
-      const qrPayload = JSON.stringify({
-        tag: data.tagNumber,
-        bar: data.barcode,
-        sn: data.serialNumber || 'N/A',
-        loc: data.location,
-        desc: data.description,
-        org: 'KAF-DZ'
-      });
-
-      QRCode.toDataURL(qrPayload, {
-        width: 120,
-        margin: 1,
-        color: {
-          dark: '#000000',
-          light: '#ffffff'
-        },
-        errorCorrectionLevel: 'M'
-      })
-        .then(url => setQrDataUrl(url))
-        .catch(err => console.error('Failed to generate QR code:', err));
-    }
-  }, [data, showQr]);
+  // Construct QR Payload text
+  const qrPayload = `KAF|TAG:${data.tagNumber}|BAR:${data.barcode}|SN:${data.serialNumber || 'N/A'}|LOC:${data.location}|DATE:${data.date.substring(0, 10)}`;
 
   if (format === 'thermal_50x30') {
     // Compact 50mm x 30mm thermal label
     return (
-      <div className="kaf-print-ticket w-[280px] bg-white text-black p-2 rounded border-2 border-black font-sans select-none shadow-sm flex flex-col justify-between">
+      <div className="kaf-print-ticket w-[290px] bg-white text-black p-2 rounded border-2 border-black font-sans select-none shadow-sm flex flex-col justify-between">
         {/* Header Strip */}
         <div className="flex items-center justify-between border-b border-black pb-1 mb-1">
           <div className="flex items-center gap-1.5">
@@ -109,15 +60,20 @@ export const PhysicalAssetTag: React.FC<PhysicalAssetTagProps> = ({
         </div>
 
         {/* Barcode & QR Code */}
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center justify-between gap-1 mt-0.5">
           {showBarcode && (
             <div className="flex-1 flex justify-center overflow-hidden">
-              <svg ref={barcodeSvgRef} className="max-w-full h-auto" />
+              <PureCode128Svg
+                value={data.barcode}
+                width={1.25}
+                height={26}
+                showText={true}
+              />
             </div>
           )}
-          {showQr && qrDataUrl && (
-            <div className="w-10 h-10 shrink-0 border border-black p-0.5 bg-white">
-              <img src={qrDataUrl} alt="QR Code" className="w-full h-full object-contain" />
+          {showQr && (
+            <div className="w-11 h-11 shrink-0 border border-black p-0.5 bg-white flex items-center justify-center">
+              <PureQrSvg value={qrPayload} size={38} />
             </div>
           )}
         </div>
@@ -180,14 +136,19 @@ export const PhysicalAssetTag: React.FC<PhysicalAssetTagProps> = ({
       <div className="flex items-center justify-between gap-3 pt-1 border-t-2 border-black">
         {showBarcode && (
           <div className="flex-1 flex flex-col items-center justify-center overflow-hidden">
-            <svg ref={barcodeSvgRef} className="max-w-full h-auto" />
+            <PureCode128Svg
+              value={data.barcode}
+              width={1.55}
+              height={36}
+              showText={true}
+            />
           </div>
         )}
 
-        {showQr && qrDataUrl && (
+        {showQr && (
           <div className="flex flex-col items-center shrink-0">
-            <div className="w-14 h-14 border border-black p-0.5 bg-white rounded">
-              <img src={qrDataUrl} alt="QR Code" className="w-full h-full object-contain" />
+            <div className="w-14 h-14 border border-black p-0.5 bg-white rounded flex items-center justify-center">
+              <PureQrSvg value={qrPayload} size={50} />
             </div>
             <span className="text-[7px] font-mono font-bold mt-0.5 text-neutral-600 uppercase">
               SCAN 2D
