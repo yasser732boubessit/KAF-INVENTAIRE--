@@ -175,6 +175,15 @@ export class LocalSQLiteEngine {
         updatedAt TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS checklist (
+        id INTEGER PRIMARY KEY,
+        title TEXT NOT NULL,
+        titleAr TEXT,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        testedAt TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
@@ -252,6 +261,131 @@ export class LocalSQLiteEngine {
       }
     } catch (e) {
       console.warn('Users table seed note:', e);
+    }
+
+    // Seed default assets, campaign, zones, discoveries, mutations, conflicts, and checklist if assets empty
+    try {
+      const assetCount = this.db.prepare('SELECT COUNT(*) as count FROM assets').get().count;
+      if (assetCount === 0) {
+        // Seed default campaign
+        this.db.prepare(`
+          INSERT OR REPLACE INTO campaigns (id, title, status, startDate, endDate, leadAuditor, zonesJson, progressPercent)
+          VALUES ('CAMP-2026-Q1', 'Campagne Générale d''Inventaire Industriel Q1-2026', 'EN_COURS', '2026-10-01', '2026-10-15', 'Yasser B. (Auditeur Principal)', '', 75)
+        `).run();
+
+        // Seed default zones
+        const insertZone = this.db.prepare('INSERT OR REPLACE INTO zones (id, name, aisle, isClosed, closedAt, closedBy) VALUES (?, ?, ?, ?, ?, ?)');
+        insertZone.run('BAY-01', 'Baie 01 - Allée A1', 'Aisle A1', 0, null, null);
+        insertZone.run('BAY-02', 'Baie 02 - Allée A2', 'Aisle A2', 1, '2026-10-08 07:50:00', 'MGR-CTRL-09');
+        insertZone.run('BAY-03', 'Baie 03 - Allée A3', 'Aisle A3', 0, null, null);
+        insertZone.run('BAY-04', 'Baie 04 - Allée A4', 'Aisle A4', 0, null, null);
+
+        // Seed initial assets
+        const initialAssetList = [
+          {
+            id: "AST-10492", officialCode: "IMMO-2026-00492", name: "High-Pressure Hydraulic Gear Pump H2",
+            nameAr: "مضخة هيدروليكية تروسية عالية الضغط H2", nameFr: "Pompe hydraulique à engrenages haute pression H2",
+            sku: "SKU-HYD-092", serialNumber: "SN-940218-GB", barcode: "894102938102", rfidTag: "E280-1160-2000-0914",
+            category: "Mechanical", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-02-L3", scannedBayLocation: "BAY-04-RACK-02-L3",
+            inventoryStatus: "CONFORME", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
+            lastScannedAt: "2026-10-08 07:14:22", scannedBy: "TECH-941", notes: "Vérification physique réussie. Emplacement conforme.",
+            imageUrl: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80", weightKg: 24.5, calibrationDueDate: "2027-04-15"
+          },
+          {
+            id: "AST-10493", officialCode: "IMMO-2026-00493", name: "Programmable Logic Controller (PLC) S7-1500",
+            nameAr: "وحدة التحكم المنطقي المبرمجة S7-1500", nameFr: "Automate Programmable Industriel (API) S7-1500",
+            sku: "SKU-AUT-150", serialNumber: "SN-772910-DE", barcode: "894102938103", rfidTag: "E280-1160-2000-0915",
+            category: "Automation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-01-L2", scannedBayLocation: "BAY-04-RACK-01-L2",
+            inventoryStatus: "CONFORME", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
+            lastScannedAt: "2026-10-08 07:22:05", scannedBy: "TECH-941", notes: "Firmware v3.1 validé, batterie de sauvegarde nominale.",
+            imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", weightKg: 3.2, calibrationDueDate: "2027-01-20"
+          },
+          {
+            id: "AST-10494", officialCode: "IMMO-2026-00494", name: "Explosion-Proof Induction Motor 15kW",
+            nameAr: "محرك حثي مضاد للانفجار بقوة 15 كيلوواط", nameFr: "Moteur à induction antidéflagrant 15 kW (ATEX)",
+            sku: "SKU-ELE-412", serialNumber: "SN-318492-AT", barcode: "894102938104", rfidTag: "E280-1160-2000-0916",
+            category: "Electrical", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-02-RACK-01-L1", scannedBayLocation: "BAY-03-RACK-04-L1",
+            inventoryStatus: "ECART_LOCALISATION", condition: "minor_wear", tamperSealIntact: 0, rfidVerified: 1, serialVerified: 1,
+            lastScannedAt: "2026-10-08 07:31:40", scannedBy: "TECH-941", notes: "Trouvé en Baie 03 au lieu de la Baie 02 théorique.",
+            imageUrl: "https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?auto=format&fit=crop&w=600&q=80", weightKg: 142.0, calibrationDueDate: "2026-11-30"
+          },
+          {
+            id: "AST-10495", officialCode: "IMMO-2026-00495", name: "Ultrasonic Vortex Flowmeter Flange DN80",
+            nameAr: "مقياس تدفق فوق صوتي دوامي بشفة DN80", nameFr: "Débitmètre vortex à ultrasons à brides DN80",
+            sku: "SKU-INS-833", serialNumber: "SN-994821-CH", barcode: "894102938105", rfidTag: "E280-1160-2000-0917",
+            category: "Instrumentation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-02-RACK-03-L2", scannedBayLocation: null,
+            inventoryStatus: "MANQUANT", condition: "uninspected", tamperSealIntact: 0, rfidVerified: 0, serialVerified: 0,
+            lastScannedAt: null, scannedBy: null, notes: "Absent lors de la tournée d'inspection Baie 02.",
+            imageUrl: "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80", weightKg: 18.5, calibrationDueDate: "2026-12-15"
+          },
+          {
+            id: "AST-10502", officialCode: "IMMO-2026-00502", name: "Lenovo ThinkVision C24-20 Industrial Workstation Monitor",
+            nameAr: "شاشة محطة التحكم والمراقبة الصناعية Lenovo C24-20", nameFr: "Moniteur de poste de supervision Lenovo C24-20 (Type A20238FD0)",
+            sku: "SKU-IT-C2420", serialNumber: "V5HND516", barcode: "1S62A8KAT1EUV5HND516", rfidTag: "E280-1160-2000-0924",
+            category: "Automation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-02-L1", scannedBayLocation: null,
+            inventoryStatus: "NON_VERIFIE", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
+            lastScannedAt: null, scannedBy: null, notes: "Moniteur LCD 23.8 pouces FHD. MTM: 62A8-KAR1-WW.",
+            imageUrl: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80", weightKg: 3.01, calibrationDueDate: "2027-12-31"
+          }
+        ];
+
+        const insertAsset = this.db.prepare(`
+          INSERT OR REPLACE INTO assets (
+            id, officialCode, name, nameAr, nameFr, sku, serialNumber, barcode, rfidTag,
+            category, zone, expectedBayLocation, scannedBayLocation, inventoryStatus, condition,
+            tamperSealIntact, rfidVerified, serialVerified, lastScannedAt, scannedBy, notes,
+            imageUrl, weightKg, calibrationDueDate
+          ) VALUES (
+            @id, @officialCode, @name, @nameAr, @nameFr, @sku, @serialNumber, @barcode, @rfidTag,
+            @category, @zone, @expectedBayLocation, @scannedBayLocation, @inventoryStatus, @condition,
+            @tamperSealIntact, @rfidVerified, @serialVerified, @lastScannedAt, @scannedBy, @notes,
+            @imageUrl, @weightKg, @calibrationDueDate
+          )
+        `);
+
+        for (const a of initialAssetList) {
+          insertAsset.run(a);
+        }
+
+        // Seed initial discoveries
+        const insertDisc = this.db.prepare(`
+          INSERT OR REPLACE INTO discoveries (id, temporaryTag, description, serialNumber, barcode, foundLocation, foundBy, foundAt, imageUrl, status, matchedAssetId)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        insertDisc.run(
+          "DEC-001", "DISCOV-2026-001", "Compresseur d'air mobile à vis 7.5kW (Non répertorié)",
+          "SN-UNKNOWN-8842", "990184918201", "BAY-03-RACK-04-L1", "TECH-941", "2026-10-08 08:15:30",
+          "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80",
+          "EN_ATTENTE_REVUE", null
+        );
+
+        // Seed initial audit log
+        this.addAuditLog({
+          id: 'LOG-INIT-01',
+          timestamp: '2026-10-08 07:14:22',
+          userId: 'SYSTEM',
+          userRole: 'RESPONSABLE_PATRIMOINE',
+          action: 'INITIALISATION_SQLITE',
+          entityId: 'SYSTEM',
+          oldValue: 'NULL',
+          newValue: 'WAL_ACTIVE',
+          reason: 'Initialisation de la base SQLite locale KAF-INVENTAIRE'
+        });
+
+        // Seed initial checklist
+        const insertChk = this.db.prepare('INSERT OR REPLACE INTO checklist (id, title, titleAr, description, status) VALUES (?, ?, ?, ?, ?)');
+        insertChk.run(1, "Scan d'un actif conforme", "مسح أصل مطابق في مكانه", "Vérifie l'identification d'un équipement présent à sa place théorique.", "PASSED");
+        insertChk.run(2, "Détection d'un écart d'emplacement", "اكتشاف أصل في مكان غير مكانه", "Signale un actif trouvé dans une baie différente de celle prévue.", "PASSED");
+        insertChk.run(3, "Clôture de zone et calcul des manquants", "إغلاق المنطقة وحساب المفقودات", "Vérifie le déclenchement des manquants seulement après clôture formelle.", "PASSED");
+        insertChk.run(4, "Consignation d'une découverte in situ", "تسجيل أصل مكتشف غير مدرج", "Vérifie l'attribution d'un tag temporaire et de sa photo.", "PASSED");
+        insertChk.run(5, "Rapprochement découverte avec manquant", "مطابقة المكتشف مع مفقود سابق", "Permet d'associer un matériel trouvé avec un actif disparu.", "PASSED");
+        insertChk.run(6, "File d'attente hors-ligne idempotente", "رتل المزامنة عند انقطاع الشبكة", "Assure l'enregistrement local en mode déconnecté sans doublon.", "PASSED");
+        insertChk.run(7, "Résolution des conflits de synchro", "معالجة تعارضات المزامنة", "Arbitrage des divergences entre données locales et serveur.", "PASSED");
+        insertChk.run(8, "Journal d'audit et non-répudiation", "سجل التدقيق غير القابل للتعديل", "Vérifie l'horodatage et la traçabilité de chaque action.", "PASSED");
+        insertChk.run(9, "Verrouillage définitif de la campagne", "إقفال واعتماد الحملة نهائياً", "Interdit toute modification ultérieure une fois la campagne scellée.", "PASSED");
+      }
+    } catch (e) {
+      console.warn('Initial SQLite seed note:', e);
     }
   }
 
@@ -393,6 +527,414 @@ export class LocalSQLiteEngine {
       new Date().toISOString(),
       id
     );
+  }
+
+  // --- Assets Operations ---
+  public getAssets(): any[] {
+    if (!this.db) return [];
+    try {
+      const rows = this.db.prepare('SELECT * FROM assets ORDER BY id ASC').all();
+      return rows.map((r: any) => ({
+        ...r,
+        tamperSealIntact: Boolean(r.tamperSealIntact),
+        rfidVerified: Boolean(r.rfidVerified),
+        serialVerified: Boolean(r.serialVerified)
+      }));
+    } catch (e) {
+      console.error('getAssets error:', e);
+      return [];
+    }
+  }
+
+  public getAssetById(id: string): any | null {
+    if (!this.db) return null;
+    try {
+      const row = this.db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
+      if (!row) return null;
+      return {
+        ...row,
+        tamperSealIntact: Boolean(row.tamperSealIntact),
+        rfidVerified: Boolean(row.rfidVerified),
+        serialVerified: Boolean(row.serialVerified)
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  public searchAssets(query: string): any[] {
+    if (!this.db) return [];
+    try {
+      const q = `%${query.trim().toLowerCase()}%`;
+      const rows = this.db.prepare(`
+        SELECT * FROM assets 
+        WHERE LOWER(id) LIKE ? OR LOWER(officialCode) LIKE ? OR LOWER(name) LIKE ? 
+           OR LOWER(serialNumber) LIKE ? OR LOWER(barcode) LIKE ? OR LOWER(expectedBayLocation) LIKE ?
+      `).all(q, q, q, q, q, q);
+      return rows.map((r: any) => ({
+        ...r,
+        tamperSealIntact: Boolean(r.tamperSealIntact),
+        rfidVerified: Boolean(r.rfidVerified),
+        serialVerified: Boolean(r.serialVerified)
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  public createAsset(asset: any): any {
+    if (!this.db) return asset;
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO assets (
+        id, officialCode, name, nameAr, nameFr, sku, serialNumber, barcode, rfidTag,
+        category, zone, expectedBayLocation, scannedBayLocation, inventoryStatus, condition,
+        tamperSealIntact, rfidVerified, serialVerified, lastScannedAt, scannedBy, notes, notesFr,
+        imageUrl, weightKg, calibrationDueDate
+      ) VALUES (
+        @id, @officialCode, @name, @nameAr, @nameFr, @sku, @serialNumber, @barcode, @rfidTag,
+        @category, @zone, @expectedBayLocation, @scannedBayLocation, @inventoryStatus, @condition,
+        @tamperSealIntact, @rfidVerified, @serialVerified, @lastScannedAt, @scannedBy, @notes, @notesFr,
+        @imageUrl, @weightKg, @calibrationDueDate
+      )
+    `);
+    stmt.run({
+      ...asset,
+      nameAr: asset.nameAr || null,
+      nameFr: asset.nameFr || null,
+      notesFr: asset.notesFr || null,
+      scannedBayLocation: asset.scannedBayLocation || null,
+      tamperSealIntact: asset.tamperSealIntact ? 1 : 0,
+      rfidVerified: asset.rfidVerified ? 1 : 0,
+      serialVerified: asset.serialVerified ? 1 : 0,
+      weightKg: asset.weightKg || 0
+    });
+    return asset;
+  }
+
+  public updateAsset(id: string, fields: any): any {
+    if (!this.db) return null;
+    const existing = this.getAssetById(id);
+    if (!existing) return null;
+    const merged = { ...existing, ...fields };
+    this.createAsset(merged);
+    return merged;
+  }
+
+  public updateInventoryStatus(id: string, status: string, bayLocation?: string, user = 'TECH-941'): any {
+    if (!this.db) return null;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const updates: any = {
+      inventoryStatus: status,
+      lastScannedAt: now,
+      scannedBy: user
+    };
+    if (bayLocation) updates.scannedBayLocation = bayLocation;
+    return this.updateAsset(id, updates);
+  }
+
+  // --- Discoveries Operations ---
+  public getDiscoveries(): any[] {
+    if (!this.db) return [];
+    try {
+      return this.db.prepare('SELECT * FROM discoveries ORDER BY foundAt DESC').all();
+    } catch {
+      return [];
+    }
+  }
+
+  public createDiscovery(discovery: any): any {
+    if (!this.db) return discovery;
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO discoveries (
+        id, temporaryTag, description, serialNumber, barcode, foundLocation,
+        foundBy, foundAt, imageUrl, status, rejectionReason, matchedAssetId
+      ) VALUES (
+        @id, @temporaryTag, @description, @serialNumber, @barcode, @foundLocation,
+        @foundBy, @foundAt, @imageUrl, @status, @rejectionReason, @matchedAssetId
+      )
+    `);
+    stmt.run({
+      ...discovery,
+      rejectionReason: discovery.rejectionReason || null,
+      matchedAssetId: discovery.matchedAssetId || null
+    });
+    return discovery;
+  }
+
+  public matchDiscovery(id: string, assetId: string): void {
+    if (!this.db) return;
+    this.db.prepare("UPDATE discoveries SET status = 'RAPPROCHE', matchedAssetId = ? WHERE id = ?").run(assetId, id);
+    this.updateInventoryStatus(assetId, 'CONFORME');
+  }
+
+  public integrateDiscovery(id: string, officialCode: string): any {
+    if (!this.db) return null;
+    const disc = this.db.prepare('SELECT * FROM discoveries WHERE id = ?').get(id);
+    if (!disc) return null;
+
+    this.db.prepare("UPDATE discoveries SET status = 'INTEGRE' WHERE id = ?").run(id);
+
+    const newAsset = {
+      id: `AST-${Math.floor(10510 + Math.random() * 899)}`,
+      officialCode,
+      name: disc.description,
+      nameAr: disc.description,
+      nameFr: disc.description,
+      sku: `SKU-DISC-${Math.floor(100 + Math.random() * 899)}`,
+      serialNumber: disc.serialNumber || `SN-REG-${Date.now().toString().slice(-6)}`,
+      barcode: disc.barcode || `89410${Math.floor(1000000 + Math.random() * 8999999)}`,
+      rfidTag: `E280-DISC-${Math.floor(1000 + Math.random() * 8999)}`,
+      category: 'Mechanical',
+      zone: 'WEST-DC-ZONE-C',
+      expectedBayLocation: disc.foundLocation,
+      scannedBayLocation: disc.foundLocation,
+      inventoryStatus: 'CONFORME',
+      condition: 'nominal',
+      tamperSealIntact: true,
+      rfidVerified: false,
+      serialVerified: true,
+      lastScannedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      scannedBy: 'TECH-941',
+      notes: `Intégré officiellement depuis découverte ${disc.temporaryTag}`,
+      imageUrl: disc.imageUrl,
+      weightKg: 10,
+      calibrationDueDate: '2027-12-31'
+    };
+
+    return this.createAsset(newAsset);
+  }
+
+  public rejectDiscovery(id: string, reason: string): void {
+    if (!this.db) return;
+    this.db.prepare("UPDATE discoveries SET status = 'REJETE', rejectionReason = ? WHERE id = ?").run(reason, id);
+  }
+
+  // --- Campaign & Zones Operations ---
+  public getCampaign(): any {
+    if (!this.db) return null;
+    try {
+      const camp = this.db.prepare('SELECT * FROM campaigns LIMIT 1').get();
+      if (!camp) return null;
+      const zones = this.db.prepare('SELECT * FROM zones ORDER BY id ASC').all();
+      return {
+        ...camp,
+        zones: zones.map((z: any) => ({
+          ...z,
+          isClosed: Boolean(z.isClosed)
+        }))
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  public closeZone(zoneId: string, user: string): void {
+    if (!this.db) return;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    this.db.prepare('UPDATE zones SET isClosed = 1, closedAt = ?, closedBy = ? WHERE id = ?').run(now, user, zoneId);
+    // Mark unverified assets in this zone as MANQUANT
+    this.db.prepare(`
+      UPDATE assets 
+      SET inventoryStatus = 'MANQUANT' 
+      WHERE expectedBayLocation LIKE ? AND inventoryStatus = 'NON_VERIFIE'
+    `).run(`${zoneId}%`);
+  }
+
+  public reopenZone(zoneId: string): void {
+    if (!this.db) return;
+    this.db.prepare('UPDATE zones SET isClosed = 0, closedAt = NULL, closedBy = NULL WHERE id = ?').run(zoneId);
+  }
+
+  public lockCampaign(): void {
+    if (!this.db) return;
+    this.db.prepare("UPDATE campaigns SET status = 'VERROUILLEE'").run();
+  }
+
+  // --- Audit Logs Operations ---
+  public getAuditLogs(): any[] {
+    if (!this.db) return [];
+    try {
+      return this.db.prepare('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 500').all();
+    } catch {
+      return [];
+    }
+  }
+
+  public addAuditLog(entry: any): any {
+    if (!this.db) return entry;
+    const newLog = {
+      id: entry.id || `LOG-${Math.floor(100 + Math.random() * 899)}`,
+      timestamp: entry.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19),
+      userId: entry.userId,
+      userRole: entry.userRole,
+      action: entry.action,
+      entityId: entry.entityId,
+      oldValue: entry.oldValue || '',
+      newValue: entry.newValue || '',
+      reason: entry.reason || ''
+    };
+    this.db.prepare(`
+      INSERT INTO audit_logs (id, timestamp, userId, userRole, action, entityId, oldValue, newValue, reason)
+      VALUES (@id, @timestamp, @userId, @userRole, @action, @entityId, @oldValue, @newValue, @reason)
+    `).run(newLog);
+    return newLog;
+  }
+
+  // --- Offline Mutations Queue Operations ---
+  public getMutations(): any[] {
+    if (!this.db) return [];
+    try {
+      const rows = this.db.prepare('SELECT * FROM offline_mutations ORDER BY timestamp DESC').all();
+      return rows.map((r: any) => ({
+        ...r,
+        payload: r.payloadJson ? JSON.parse(r.payloadJson) : {}
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  public addMutation(mutation: any): any {
+    if (!this.db) return mutation;
+    const newMut = {
+      id: mutation.id || `MUT-${Math.floor(99410 + Math.random() * 89999)}`,
+      idempotencyKey: mutation.idempotencyKey,
+      timestamp: mutation.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19),
+      type: mutation.type,
+      assetId: mutation.assetId,
+      assetName: mutation.assetName || '',
+      payloadJson: JSON.stringify(mutation.payload || {}),
+      syncStatus: mutation.syncStatus || 'PENDING',
+      retryCount: mutation.retryCount || 0,
+      lastError: mutation.lastError || null
+    };
+    this.db.prepare(`
+      INSERT OR REPLACE INTO offline_mutations (id, idempotencyKey, timestamp, type, assetId, assetName, payloadJson, syncStatus, retryCount, lastError)
+      VALUES (@id, @idempotencyKey, @timestamp, @type, @assetId, @assetName, @payloadJson, @syncStatus, @retryCount, @lastError)
+    `).run(newMut);
+    return { ...newMut, payload: mutation.payload || {} };
+  }
+
+  public flushMutations(): number {
+    if (!this.db) return 0;
+    const res = this.db.prepare("UPDATE offline_mutations SET syncStatus = 'SUCCESS' WHERE syncStatus = 'PENDING'").run();
+    return res.changes;
+  }
+
+  public clearMutations(): void {
+    if (!this.db) return;
+    this.db.prepare('DELETE FROM offline_mutations').run();
+  }
+
+  // --- Conflicts Operations ---
+  public getConflicts(): any[] {
+    if (!this.db) return [];
+    try {
+      const rows = this.db.prepare('SELECT * FROM conflicts ORDER BY timestamp DESC').all();
+      return rows.map((r: any) => ({
+        ...r,
+        resolved: Boolean(r.resolved)
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  public resolveConflict(conflictId: string, resolution: string): void {
+    if (!this.db) return;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    this.db.prepare(`
+      UPDATE conflicts 
+      SET resolved = 1, resolutionDecision = ?, resolvedAt = ?, resolvedBy = 'MGR-ADMIN-01' 
+      WHERE id = ?
+    `).run(resolution, now, conflictId);
+  }
+
+  // --- Checklist Operations ---
+  public getChecklist(): any[] {
+    if (!this.db) return [];
+    try {
+      return this.db.prepare('SELECT * FROM checklist ORDER BY id ASC').all();
+    } catch {
+      return [];
+    }
+  }
+
+  public updateChecklist(id: number, status: string): void {
+    if (!this.db) return;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    this.db.prepare('UPDATE checklist SET status = ?, testedAt = ? WHERE id = ?').run(status, now, id);
+  }
+
+  // --- Backup & SQL Export ---
+  public exportBackup(): any {
+    return {
+      version: '1.0.0',
+      exportedAt: new Date().toISOString(),
+      source: 'KAF-INVENTAIRE Electron Native SQLite',
+      schemaVersion: 4,
+      data: {
+        assets: this.getAssets(),
+        discoveries: this.getDiscoveries(),
+        campaigns: [this.getCampaign()].filter(Boolean),
+        mutations: this.getMutations(),
+        conflicts: this.getConflicts(),
+        auditLogs: this.getAuditLogs(),
+        checklist: this.getChecklist(),
+        users: this.getUsers()
+      }
+    };
+  }
+
+  public importBackup(backup: any): boolean {
+    if (!this.db || !backup?.data) return false;
+    try {
+      this.db.transaction(() => {
+        if (backup.data.assets) {
+          this.db.prepare('DELETE FROM assets').run();
+          for (const a of backup.data.assets) this.createAsset(a);
+        }
+        if (backup.data.discoveries) {
+          this.db.prepare('DELETE FROM discoveries').run();
+          for (const d of backup.data.discoveries) this.createDiscovery(d);
+        }
+        if (backup.data.auditLogs) {
+          this.db.prepare('DELETE FROM audit_logs').run();
+          for (const l of backup.data.auditLogs) this.addAuditLog(l);
+        }
+        if (backup.data.mutations) {
+          this.db.prepare('DELETE FROM offline_mutations').run();
+          for (const m of backup.data.mutations) this.addMutation(m);
+        }
+        if (backup.data.users) {
+          this.db.prepare('DELETE FROM users').run();
+          for (const u of backup.data.users) this.createUser(u);
+        }
+      })();
+      return true;
+    } catch (e) {
+      console.error('Import backup error:', e);
+      return false;
+    }
+  }
+
+  public exportSqlDump(): string {
+    const assets = this.getAssets();
+    const discoveries = this.getDiscoveries();
+    const now = new Date().toISOString();
+    let sql = `-- ====================================================================\n`;
+    sql += `-- KAF-INVENTAIRE Native Windows SQLite Database Dump\n`;
+    sql += `-- Exported: ${now}\n`;
+    sql += `-- ====================================================================\n\n`;
+    sql += `PRAGMA foreign_keys = ON;\n`;
+    sql += `PRAGMA journal_mode = WAL;\n\n`;
+
+    sql += `BEGIN TRANSACTION;\n`;
+    for (const a of assets) {
+      sql += `INSERT OR REPLACE INTO assets (id, officialCode, name, barcode, inventoryStatus) VALUES ('${a.id}', '${a.officialCode}', '${(a.name || '').replace(/'/g, "''")}', '${a.barcode}', '${a.inventoryStatus}');\n`;
+    }
+    sql += `COMMIT;\n`;
+    return sql;
   }
 
   public close(): void {
