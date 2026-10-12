@@ -9,11 +9,12 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js dist-electron",
     "lint": "tsc --noEmit",
-    "electron:dev": "concurrently \"vite --port=3000\" \"wait-on tcp:3000 && electron .\"",
-    "electron:build:win": "vite build && electron-builder --win --x64",
-    "electron:pack": "vite build && electron-builder --dir"
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --external:electron --external:better-sqlite3 --external:sqlite3 --outfile=dist-electron/main.cjs && esbuild electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
+    "electron:dev": "npm run build:electron && concurrently -k \"vite --port=3000 --strictPort\" \"wait-on tcp:3000 && electron .\"",
+    "electron:build:win": "vite build && npm run build:electron && electron-builder --win --x64",
+    "electron:pack": "vite build && npm run build:electron && electron-builder --dir"
   },
-  "main": "electron/main.ts",
+  "main": "dist-electron/main.cjs",
   "build": {
     "appId": "com.kafinventaire.desktop",
     "productName": "KAF-INVENTAIRE",

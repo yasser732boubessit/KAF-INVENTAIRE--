@@ -40,9 +40,12 @@ import { AuditTrailView } from './components/AuditTrailView';
 import { ChecklistValidationView } from './components/ChecklistValidationView';
 import { AuditReportManifest } from './components/AuditReportManifest';
 import { DesktopDatabaseCenter } from './components/DesktopDatabaseCenter';
+import { UserManagementView } from './components/UserManagementView';
 import { NewAssetModal } from './components/NewAssetModal';
 import { sound } from './utils/audio';
 import { dbService } from './services/databaseService';
+import { authService } from './security/authService';
+import { hasPermission } from './security/permissions';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('fr');
@@ -155,7 +158,9 @@ export default function App() {
           '7': 'audit_logs',
           '8': 'checklist',
           '9': 'reports',
-          '0': 'desktop'
+          '0': 'desktop',
+          'u': 'users',
+          'U': 'users'
         };
         const target = keyMap[e.key];
         if (target) {
@@ -546,8 +551,20 @@ export default function App() {
     );
   };
 
-  // Discoveries: Commission / Integrate to Master Inventory
+  // Discoveries: Commission / Integrate to Master Inventory (Only Admin / RESPONSABLE_PATRIMOINE)
   const handleIntegrateOfficial = (discoveryId: string, officialCode: string) => {
+    if (!hasPermission(userRole, 'discoveries.integrate')) {
+      sound.playAlert();
+      addAuditLog(
+        'TENTATIVE_NON_AUTORISEE',
+        discoveryId,
+        userRole,
+        'discoveries.integrate',
+        'Tentative d\'intégration d\'actif bloquée par le contrôle RBAC (Rôle insuffisant)'
+      );
+      return;
+    }
+
     const discovery = discoveries.find(d => d.id === discoveryId);
     if (!discovery) return;
 
@@ -599,8 +616,20 @@ export default function App() {
     );
   };
 
-  // Discoveries: Reject Discovery
+  // Discoveries: Reject Discovery (Only Admin / RESPONSABLE_PATRIMOINE)
   const handleRejectDiscovery = (discoveryId: string, reason: string) => {
+    if (!hasPermission(userRole, 'discoveries.reject')) {
+      sound.playAlert();
+      addAuditLog(
+        'TENTATIVE_NON_AUTORISEE',
+        discoveryId,
+        userRole,
+        'discoveries.reject',
+        'Tentative de rejet d\'actif bloquée par le contrôle RBAC'
+      );
+      return;
+    }
+
     setDiscoveries(prev => prev.map(d => d.id === discoveryId ? {
       ...d,
       status: 'REJETE',
@@ -916,6 +945,17 @@ export default function App() {
               onRefreshData={refreshFromDB}
             />
           )}
+
+          {/* Screen 11: Enterprise RBAC User & Permissions Management */}
+          {activeScreen === 'users' && (
+            <UserManagementView
+              lang={lang}
+              currentUserRole={userRole}
+              onAuditLog={(action, entityId, oldValue, newValue, reason) => {
+                addAuditLog(action, entityId, oldValue, newValue, reason);
+              }}
+            />
+          )}
         </main>
 
         {/* Right Vertical Sidebar Navigation */}
@@ -926,6 +966,7 @@ export default function App() {
           pendingDiscoveriesCount={pendingDiscoveriesCount}
           pendingMutationCount={mutations.filter(m => m.syncStatus === 'PENDING').length}
           isElectron={dbService.isElectron()}
+          userRole={userRole}
           onQuickBackup={handleQuickBackup}
         />
       </div>

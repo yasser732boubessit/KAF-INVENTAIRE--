@@ -23,6 +23,7 @@ export const translations = {
     screenReports: "Bordereau & Certification",
     screenChecklist: "Checklist Tests (9/9)",
     screenDesktop: "Gestion Desktop & SQLite",
+    screenUsers: "Utilisateurs & Permissions",
 
     // Desktop & SQLite Hub
     desktopTitle: "Centre de Contrôle Desktop Windows & Base SQLite",
@@ -309,6 +310,7 @@ export const translations = {
     screenReports: "المحضر والاعتماد النهائي",
     screenChecklist: "قائمة الاختبار (9/9)",
     screenDesktop: "تطبيق سطح المكتب وقاعدة SQLite",
+    screenUsers: "المستخدمون والصلاحيات والأدوار",
 
     // Desktop & SQLite Hub
     desktopTitle: "مركز تحكم تطبيق سطح المكتب Windows وقاعدة بيانات SQLite",
@@ -582,6 +584,7 @@ export const translations = {
     screenReports: "Manifest & Sign-off",
     screenChecklist: "Checklist Tests (9/9)",
     screenDesktop: "Desktop & SQLite Engine",
+    screenUsers: "Users & Access Control",
 
     // Desktop & SQLite Hub
     desktopTitle: "Windows Desktop Control Center & SQLite Database",

@@ -138,7 +138,8 @@ export type ActiveScreen =
   | 'audit_logs' 
   | 'checklist' 
   | 'reports' 
-  | 'desktop';
+  | 'desktop'
+  | 'users';
 
 export interface SQLiteDatabaseStats {
   engine: 'ELECTRON_SQLITE' | 'BROWSER_INDEXEDDB_SQLITE';
@@ -218,6 +219,12 @@ export interface ElectronAPIType {
     resetSeed: () => Promise<void>;
     runIntegrityCheck: () => Promise<string>;
     exportSqlDump: () => Promise<string>;
+    // User & Permission Management (RBAC)
+    getUsers: () => Promise<any[]>;
+    createUser: (user: any) => Promise<any>;
+    updateUser: (id: string, fields: any) => Promise<any>;
+    setUserActiveStatus: (id: string, isActive: boolean) => Promise<void>;
+    resetUserPassword: (id: string, newPasswordHash: string) => Promise<void>;
   };
   system: {
     getAppInfo: () => Promise<{ appName: string; version: string; dataDir: string }>;

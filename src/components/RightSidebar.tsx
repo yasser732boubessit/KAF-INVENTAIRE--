@@ -16,9 +16,10 @@ import {
   Terminal,
   Activity,
   Volume2,
-  VolumeX
+  VolumeX,
+  Users
 } from 'lucide-react';
-import { ActiveScreen, Language } from '../types';
+import { ActiveScreen, Language, UserRole } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
 import { KafLogo } from './KafLogo';
@@ -30,6 +31,7 @@ interface RightSidebarProps {
   pendingDiscoveriesCount: number;
   pendingMutationCount: number;
   isElectron: boolean;
+  userRole?: UserRole;
   onQuickBackup?: () => void;
 }
 
@@ -49,6 +51,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   pendingDiscoveriesCount,
   pendingMutationCount,
   isElectron,
+  userRole,
   onQuickBackup
 }) => {
   const t = translations[lang];
@@ -149,7 +152,27 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       badgeColor: 'green',
       shortcut: 'Alt+0' 
     },
+    { 
+      id: 'users', 
+      label: t.screenUsers || "Utilisateurs & Permissions", 
+      icon: <Users className="w-4 h-4 shrink-0 text-purple-400" />, 
+      shortcut: 'Alt+U' 
+    },
   ];
+
+  // RBAC Filter: If Agent d'Ajout or Contrôleur, hide restricted administrative modules
+  const filteredNavItems = navItems.filter(item => {
+    if (userRole === 'AGENT_INVENTAIRE') {
+      // Agent d'ajout: No user management, no reports/audit/desktop admin
+      return !['users', 'desktop', 'audit_logs'].includes(item.id);
+    }
+    if (userRole === 'CONTROLEUR_ZONE') {
+      // Agent vérification: No user management, no desktop admin
+      return !['users', 'desktop'].includes(item.id);
+    }
+    // Responsable patrimoine: Access all modules
+    return true;
+  });
 
   return (
     <aside 
@@ -209,7 +232,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
       {/* Nav Items List */}
       <nav className="flex-1 py-2 overflow-y-auto overflow-x-hidden space-y-1 px-2 scrollbar-thin scrollbar-thumb-neutral-800">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const isActive = activeScreen === item.id;
 
           return (

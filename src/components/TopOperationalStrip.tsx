@@ -325,25 +325,35 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
             )}
           </div>
 
-          {/* Rôle et Profil Utilisateur */}
+          {/* Rôle et Profil Utilisateur (3 profils officiels KAF-INVENTAIRE) */}
           <div className="flex items-center gap-1.5 bg-neutral-900 border border-neutral-700 px-2.5 py-1 rounded text-[11px]">
-            <UserRound className="w-3.5 h-3.5 text-neutral-400" />
+            <UserRound className="w-3.5 h-3.5 text-purple-400" />
             <select
               value={userRole}
               onChange={(e) => onRoleChange(e.target.value as UserRole)}
               className="bg-transparent text-white font-medium border-none outline-none cursor-pointer text-[11px]"
               title={t.currentRole}
             >
+              <option value="RESPONSABLE_PATRIMOINE" className="bg-neutral-900 text-white">
+                {lang === 'fr' ? '1. Administrateur (Gouvernance)' : lang === 'ar' ? '1. المسؤول العام (إدارة كاملة)' : '1. Administrator (Full)'}
+              </option>
               <option value="AGENT_INVENTAIRE" className="bg-neutral-900 text-white">
-                {lang === 'fr' ? 'Agent (Terrain)' : lang === 'ar' ? 'وكيل (ميداني)' : 'Agent (Field)'}
+                {lang === 'fr' ? '2. Agent d\'Ajout / Identification' : lang === 'ar' ? '2. وكيل الإضافة والتعريف' : '2. Identification Agent'}
               </option>
               <option value="CONTROLEUR_ZONE" className="bg-neutral-900 text-white">
-                {lang === 'fr' ? 'Contrôleur (Zone)' : lang === 'ar' ? 'مراقب (المنطقة)' : 'Controller (Zone)'}
-              </option>
-              <option value="RESPONSABLE_PATRIMOINE" className="bg-neutral-900 text-white">
-                {lang === 'fr' ? 'Responsable (Admin)' : lang === 'ar' ? 'مسؤول (إدارة)' : 'Manager (Admin)'}
+                {lang === 'fr' ? '3. Agent de Vérification / Chargement' : lang === 'ar' ? '3. وكيل التحقق والمراقبة والشحن' : '3. Verification & Loading'}
               </option>
             </select>
+            {userRole === 'RESPONSABLE_PATRIMOINE' && (
+              <button
+                type="button"
+                onClick={() => setActiveScreen('users')}
+                className="ml-1 text-purple-400 hover:text-purple-300 font-bold text-[10px]"
+                title="Gérer les comptes et les permissions"
+              >
+                ⚙️
+              </button>
+            )}
           </div>
         </div>
       </div>

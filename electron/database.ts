@@ -174,9 +174,85 @@ export class LocalSQLiteEngine {
         value TEXT NOT NULL,
         updatedAt TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        fullName TEXT NOT NULL,
+        email TEXT,
+        role TEXT NOT NULL,
+        isActive INTEGER DEFAULT 1,
+        avatarUrl TEXT,
+        passwordHash TEXT NOT NULL,
+        lastLoginAt TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     `;
 
     this.db.exec(schema);
+
+    // Seed default administrative and operational users if table is empty
+    try {
+      const userCount = this.db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+      if (userCount === 0) {
+        const seedUsers = [
+          {
+            id: 'USR-ADMIN-01',
+            username: 'admin.patrimoine',
+            fullName: 'Yacine Benali (Responsable Patrimoine)',
+            email: 'y.benali@kotama-agrifood.dz',
+            role: 'RESPONSABLE_PATRIMOINE',
+            isActive: 1,
+            avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
+            passwordHash: 'e6c279f6271ed4936e3b315f4b869f329316a49d5ecd25275ea473634099e097', // admin123
+            createdAt: '2026-01-01 08:00:00',
+            updatedAt: '2026-10-12 08:30:00',
+            lastLoginAt: '2026-10-12 08:30:00'
+          },
+          {
+            id: 'USR-AGENT-02',
+            username: 'agent.identification',
+            fullName: 'Mohamed Brahimi (Agent Identification)',
+            email: 'm.brahimi@kotama-agrifood.dz',
+            role: 'AGENT_INVENTAIRE',
+            isActive: 1,
+            avatarUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=150&q=80',
+            passwordHash: '35d72ef7daae93d567ad00cb016788556f8f553efef24f8d95fe76a742cb5294', // agent123
+            createdAt: '2026-01-15 08:00:00',
+            updatedAt: '2026-10-12 07:45:00',
+            lastLoginAt: '2026-10-12 07:45:00'
+          },
+          {
+            id: 'USR-CTRL-03',
+            username: 'controleur.chargement',
+            fullName: 'Amine Khelifi (Agent Contrôle / Chargement)',
+            email: 'a.khelifi@kotama-agrifood.dz',
+            role: 'CONTROLEUR_ZONE',
+            isActive: 1,
+            avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+            passwordHash: '8b6d8591ef1fc5773199c0d3557e5e3e2a77a45fc9e779a51980ee90efecbcf0', // ctrl123
+            createdAt: '2026-02-01 08:00:00',
+            updatedAt: '2026-10-12 08:15:00',
+            lastLoginAt: '2026-10-12 08:15:00'
+          }
+        ];
+
+        const insert = this.db.prepare(`
+          INSERT INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
+          VALUES (@id, @username, @fullName, @email, @role, @isActive, @avatarUrl, @passwordHash, @lastLoginAt, @createdAt, @updatedAt)
+        `);
+
+        for (const u of seedUsers) {
+          insert.run(u);
+        }
+      }
+    } catch (e) {
+      console.warn('Users table seed note:', e);
+    }
   }
 
   public getStats() {
@@ -240,6 +316,83 @@ export class LocalSQLiteEngine {
     } catch (err: any) {
       return `Integrity check failed: ${err.message}`;
     }
+  }
+
+  public getUsers(): any[] {
+    if (!this.db) return [];
+    try {
+      const rows = this.db.prepare('SELECT id, username, fullName, email, role, isActive, avatarUrl, lastLoginAt, createdAt, updatedAt FROM users ORDER BY createdAt ASC').all();
+      return rows.map((r: any) => ({
+        ...r,
+        isActive: Boolean(r.isActive)
+      }));
+    } catch (e) {
+      console.error('getUsers error:', e);
+      return [];
+    }
+  }
+
+  public createUser(user: any): any {
+    if (!this.db) return user;
+    const stmt = this.db.prepare(`
+      INSERT INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      user.id,
+      user.username,
+      user.fullName,
+      user.email || '',
+      user.role,
+      user.isActive ? 1 : 0,
+      user.avatarUrl || '',
+      user.passwordHash,
+      user.lastLoginAt || null,
+      user.createdAt || new Date().toISOString(),
+      user.updatedAt || new Date().toISOString()
+    );
+    return user;
+  }
+
+  public updateUser(id: string, fields: any): any {
+    if (!this.db) return null;
+    const allowed = ['fullName', 'email', 'role', 'avatarUrl', 'isActive', 'updatedAt'];
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    for (const key of allowed) {
+      if (fields[key] !== undefined) {
+        updates.push(`${key} = ?`);
+        values.push(key === 'isActive' ? (fields[key] ? 1 : 0) : fields[key]);
+      }
+    }
+
+    if (updates.length > 0) {
+      updates.push('updatedAt = ?');
+      values.push(new Date().toISOString());
+      values.push(id);
+      this.db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    }
+
+    return this.db.prepare('SELECT id, username, fullName, email, role, isActive, avatarUrl, lastLoginAt, createdAt, updatedAt FROM users WHERE id = ?').get(id);
+  }
+
+  public setUserActiveStatus(id: string, isActive: boolean): void {
+    if (!this.db) return;
+    this.db.prepare('UPDATE users SET isActive = ?, updatedAt = ? WHERE id = ?').run(
+      isActive ? 1 : 0,
+      new Date().toISOString(),
+      id
+    );
+  }
+
+  public resetUserPassword(id: string, newPasswordHash: string): void {
+    if (!this.db) return;
+    this.db.prepare('UPDATE users SET passwordHash = ?, updatedAt = ? WHERE id = ?').run(
+      newPasswordHash,
+      new Date().toISOString(),
+      id
+    );
   }
 
   public close(): void {

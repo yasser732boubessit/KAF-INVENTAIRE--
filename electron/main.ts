@@ -23,7 +23,9 @@ function createWindow() {
     title: 'KAF-INVENTAIRE | Precision Industrial Asset Management',
     autoHideMenuBar: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: fs.existsSync(path.join(__dirname, 'preload.cjs'))
+        ? path.join(__dirname, 'preload.cjs')
+        : path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
@@ -56,6 +58,33 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('db:runIntegrityCheck', async () => {
     return dbEngine ? dbEngine.checkIntegrity() : 'ok';
+  });
+
+  // User & Permission Management (RBAC) IPC Handlers
+  ipcMain.handle('db:getUsers', async () => {
+    return dbEngine ? dbEngine.getUsers() : [];
+  });
+
+  ipcMain.handle('db:createUser', async (_: any, user: any) => {
+    if (!dbEngine) throw new Error('Database engine not initialized');
+    return dbEngine.createUser(user);
+  });
+
+  ipcMain.handle('db:updateUser', async (_: any, id: string, fields: any) => {
+    if (!dbEngine) throw new Error('Database engine not initialized');
+    return dbEngine.updateUser(id, fields);
+  });
+
+  ipcMain.handle('db:setUserActiveStatus', async (_: any, id: string, isActive: boolean) => {
+    if (!dbEngine) throw new Error('Database engine not initialized');
+    dbEngine.setUserActiveStatus(id, isActive);
+    return true;
+  });
+
+  ipcMain.handle('db:resetUserPassword', async (_: any, id: string, newPasswordHash: string) => {
+    if (!dbEngine) throw new Error('Database engine not initialized');
+    dbEngine.resetUserPassword(id, newPasswordHash);
+    return true;
   });
 
   ipcMain.handle('system:getAppInfo', async () => {

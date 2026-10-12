@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resetSeed: () => ipcRenderer.invoke('db:resetSeed'),
     runIntegrityCheck: () => ipcRenderer.invoke('db:runIntegrityCheck'),
     exportSqlDump: () => ipcRenderer.invoke('db:exportSqlDump'),
+    getUsers: () => ipcRenderer.invoke('db:getUsers'),
+    createUser: (user: any) => ipcRenderer.invoke('db:createUser', user),
+    updateUser: (id: string, fields: any) => ipcRenderer.invoke('db:updateUser', id, fields),
+    setUserActiveStatus: (id: string, isActive: boolean) => ipcRenderer.invoke('db:setUserActiveStatus', id, isActive),
+    resetUserPassword: (id: string, newPasswordHash: string) => ipcRenderer.invoke('db:resetUserPassword', id, newPasswordHash),
   },
   system: {
     getAppInfo: () => ipcRenderer.invoke('system:getAppInfo'),

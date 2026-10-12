@@ -19,6 +19,8 @@ import {
   initialAuditLogs, 
   initialChecklist 
 } from '../mockData';
+import { AppUser } from '../security/permissions';
+import { INITIAL_USERS } from '../security/crypto';
 
 export interface IDatabaseService {
   isElectron: () => boolean;
@@ -53,6 +55,12 @@ export interface IDatabaseService {
   resetSeed: () => Promise<void>;
   runIntegrityCheck: () => Promise<string>;
   exportSqlDump: () => Promise<string>;
+  // User Management
+  getUsers: () => Promise<AppUser[]>;
+  createUser: (user: AppUser) => Promise<AppUser>;
+  updateUser: (id: string, fields: Partial<AppUser>) => Promise<AppUser>;
+  setUserActiveStatus: (id: string, isActive: boolean) => Promise<void>;
+  resetUserPassword: (id: string, newPasswordHash: string) => Promise<void>;
 }
 
 /**
@@ -126,6 +134,13 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
         // Table: app_settings
         if (!db.objectStoreNames.contains('app_settings')) {
           db.createObjectStore('app_settings', { keyPath: 'key' });
+        }
+
+        // Table: users
+        if (!db.objectStoreNames.contains('users')) {
+          const store = db.createObjectStore('users', { keyPath: 'id' });
+          store.createIndex('username', 'username', { unique: true });
+          store.createIndex('role', 'role', { unique: false });
         }
       };
 
@@ -890,6 +905,77 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     return sql;
   }
 
+  // User Management Methods (BrowserIndexedDBAdapter)
+  async getUsers(): Promise<AppUser[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      if (!db.objectStoreNames.contains('users')) {
+        return this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS);
+      }
+      return new Promise<AppUser[]>((resolve) => {
+        const tx = db.transaction('users', 'readonly');
+        const store = tx.objectStore('users');
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const res = req.result;
+          if (!res || res.length === 0) {
+            resolve(this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS));
+          } else {
+            resolve(res);
+          }
+        };
+        req.onerror = () => resolve(this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS));
+      });
+    } catch {
+      return this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS);
+    }
+  }
+
+  async createUser(user: AppUser): Promise<AppUser> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      if (db.objectStoreNames.contains('users')) {
+        const tx = db.transaction('users', 'readwrite');
+        tx.objectStore('users').put(user);
+      }
+    } catch {}
+    this.updateLocalStorageArray('kaf_users_v3', user);
+    return user;
+  }
+
+  async updateUser(id: string, fields: Partial<AppUser>): Promise<AppUser> {
+    const users = await this.getUsers();
+    const existing = users.find(u => u.id === id);
+    if (!existing) throw new Error(`User with ID ${id} not found`);
+
+    const updated: AppUser = {
+      ...existing,
+      ...fields,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      const db = await this.openDB();
+      if (db.objectStoreNames.contains('users')) {
+        const tx = db.transaction('users', 'readwrite');
+        tx.objectStore('users').put(updated);
+      }
+    } catch {}
+
+    this.updateLocalStorageArray('kaf_users_v3', updated);
+    return updated;
+  }
+
+  async setUserActiveStatus(id: string, isActive: boolean): Promise<void> {
+    await this.updateUser(id, { isActive });
+  }
+
+  async resetUserPassword(id: string, newPasswordHash: string): Promise<void> {
+    await this.updateUser(id, { passwordHash: newPasswordHash });
+  }
+
   // Helpers for local storage
   private getFromLocalStorage<T>(key: string, fallback: T): T {
     try {
@@ -1065,6 +1151,26 @@ class ElectronIPCAdapter implements IDatabaseService {
 
   async exportSqlDump(): Promise<string> {
     return this.api.db.exportSqlDump();
+  }
+
+  async getUsers(): Promise<AppUser[]> {
+    return this.api.db.getUsers();
+  }
+
+  async createUser(user: AppUser): Promise<AppUser> {
+    return this.api.db.createUser(user);
+  }
+
+  async updateUser(id: string, fields: Partial<AppUser>): Promise<AppUser> {
+    return this.api.db.updateUser(id, fields);
+  }
+
+  async setUserActiveStatus(id: string, isActive: boolean): Promise<void> {
+    return this.api.db.setUserActiveStatus(id, isActive);
+  }
+
+  async resetUserPassword(id: string, newPasswordHash: string): Promise<void> {
+    return this.api.db.resetUserPassword(id, newPasswordHash);
   }
 }
 
