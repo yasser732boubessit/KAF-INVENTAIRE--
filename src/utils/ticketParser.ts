@@ -1,3 +1,5 @@
+import { normalizeGarbledScanString } from './keyboardScannerEngine';
+
 /**
  * Parsed Ticket / Label scan information
  * Special support for Lenovo industrial asset nameplates and generic barcodes
@@ -27,6 +29,10 @@ export interface ScannerHardwareConfig {
   soundBeepEnabled: boolean;
   stripLeading1S: boolean;
   activeProfile: 'HENEX_3206R_DEFAULT' | 'CUSTOM';
+  // Keyboard Layout Immunity Feature
+  keyboardImmunityActive: boolean;
+  autoRepairKeyboardLayout: boolean;
+  detectedLayoutNotice?: string;
 }
 
 export const DEFAULT_SCANNER_CONFIG: ScannerHardwareConfig = {
@@ -39,12 +45,15 @@ export const DEFAULT_SCANNER_CONFIG: ScannerHardwareConfig = {
   autoReconcile: true,
   soundBeepEnabled: true,
   stripLeading1S: true,
-  activeProfile: 'HENEX_3206R_DEFAULT'
+  activeProfile: 'HENEX_3206R_DEFAULT',
+  keyboardImmunityActive: true,
+  autoRepairKeyboardLayout: true
 };
 
 /**
  * Intelligent ticket and barcode parser
  * Handles Lenovo 1S barcode format, industrial labels, serials, and standard barcodes
+ * Automatically normalizes French (AZERTY) and Arabic (AR) keyboard distortion
  */
 export function parseTicketData(input: string, config: ScannerHardwareConfig = DEFAULT_SCANNER_CONFIG): ParsedTicketInfo {
   let cleaned = (input || '').trim();
@@ -56,6 +65,14 @@ export function parseTicketData(input: string, config: ScannerHardwareConfig = D
 
   // Remove common barcode delimiters / control characters
   cleaned = cleaned.replace(/[\r\n\t]/g, '').trim();
+
+  // Automatic Keyboard Layout Immunity: Repair corrupted Arabic or AZERTY keystrokes
+  if (config.autoRepairKeyboardLayout !== false) {
+    const repairResult = normalizeGarbledScanString(cleaned);
+    if (repairResult.repaired) {
+      cleaned = repairResult.normalized;
+    }
+  }
 
   // 1. Lenovo 1S Barcode Format (e.g. 1S62A8KAT1EUV5HND516)
   // Format: 1S + MTM/Model code (e.g. 62A8KAT1EU) + Serial Number (e.g. V5HND516)

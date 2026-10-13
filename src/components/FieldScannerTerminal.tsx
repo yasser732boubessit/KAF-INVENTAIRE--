@@ -20,8 +20,11 @@ import {
   Check,
   Search,
   Monitor,
-  Printer
+  Printer,
+  Globe,
+  ShieldCheck
 } from 'lucide-react';
+import { translateHardwareEventToChar, normalizeGarbledScanString } from '../utils/keyboardScannerEngine';
 import { Asset, AssetCondition, Language } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
@@ -232,7 +235,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
       lastKeyTime = now;
 
       // Enter key indicates end of barcode transmission from HENEX scanner
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter') {
         if (buffer.length >= scannerConfig.minBarcodeLength) {
           e.preventDefault();
           const scannedText = buffer;
@@ -249,14 +252,25 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
         buffer = ''; // timeout reached, reset buffer
       }
 
-      if (e.key.length === 1) {
-        buffer += e.key;
+      // Hardware Keyboard Immunity: decode physical HID scan code (e.code) directly to standard ASCII
+      if (scannerConfig.keyboardImmunityActive !== false) {
+        const hardwareChar = translateHardwareEventToChar(e);
+        if (hardwareChar && hardwareChar !== '\n' && hardwareChar !== '\t') {
+          buffer += hardwareChar;
+          return;
+        }
+      }
+
+      // Fallback: If not matched by scan code, normalize any localized/garbled character
+      if (e.key && e.key.length === 1) {
+        const repaired = normalizeGarbledScanString(e.key);
+        buffer += repaired.normalized;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [processRawScan, scannerConfig.interCharTimeoutMs, scannerConfig.minBarcodeLength]);
+  }, [processRawScan, scannerConfig.interCharTimeoutMs, scannerConfig.keyboardImmunityActive, scannerConfig.minBarcodeLength]);
 
   // Run auto-sweep simulation
   const handleAutoSweep = () => {
@@ -280,9 +294,16 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualCode.trim()) return;
-    processRawScan(manualCode.trim());
+    const repaired = normalizeGarbledScanString(manualCode.trim()).normalized;
+    processRawScan(repaired);
     setManualCode('');
   };
+
+  const manualRepairPreview = React.useMemo(() => {
+    if (!manualCode.trim()) return null;
+    const res = normalizeGarbledScanString(manualCode.trim());
+    return res.repaired ? res : null;
+  }, [manualCode]);
 
   // Quick 1-click test with the user's uploaded Lenovo C24-20 ticket from Image 2
   const handleSimulateLenovoTicketScan = () => {
@@ -390,11 +411,15 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
                   {scannerConfig.connectionMode === 'BLUETOOTH_WIRELESS' ? 'BT SANS FIL' : 
                    scannerConfig.connectionMode === 'USB_DONGLE_2_4G' ? '2.4G DONGLE' : 'USB FILAIRE'}
                 </span>
+                <span className="text-[10px] bg-sky-950 text-sky-300 px-1.5 py-0.2 rounded border border-sky-800 flex items-center gap-1 font-mono">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span>{isAr ? 'مناعة كاملة للغة الكيبورد (AZERTY / AR / EN)' : 'Clavier Immunisé (AZERTY / AR / EN)'}</span>
+                </span>
               </div>
               <span className="text-[11px] text-slate-400">
                 {isAr 
-                  ? 'القارئ متصل وجاهز لالتقاط الباركود والتيكاث تلقائياً عند الضغط على الزناد' 
-                  : 'Scanner sans fil prêt. Appuyez sur la gâchette pour capturer l\'étiquette.'}
+                  ? 'القارئ متصل ومبرمج لفك رموز التيكاث بأمان بغض النظر عن لغة الكيبورد النشطة في ويندوز' 
+                  : 'Scanner sans fil prêt. Décodage matériel direct insensible à la disposition active Windows.'}
               </span>
             </div>
           </div>
@@ -626,22 +651,44 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
           </div>
 
           {/* Manual Numeric Barcode Key-in */}
-          <form onSubmit={handleManualSubmit} className="bg-[#131E3D] p-3 rounded border border-slate-800 flex gap-2">
-            <input
-              id="manual-scanner-input"
-              type="text"
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              placeholder={isAr ? "كود التيكاث أو الرقم التسلسلي (مثال: 1S62A8KAT1EUV5HND516)..." : "Code-barres ou N° série (ex: 1S62A8KAT1EUV5HND516)..."}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
-            />
-            <button
-              type="submit"
-              className="bg-slate-800 hover:bg-slate-700 text-sky-400 px-3 py-1 rounded text-xs font-bold border border-slate-700"
-            >
-              {isAr ? 'تجربة' : 'Tester'}
-            </button>
-          </form>
+          <div className="bg-[#131E3D] p-3 rounded border border-slate-800 space-y-2">
+            <form onSubmit={handleManualSubmit} className="flex gap-2">
+              <input
+                id="manual-scanner-input"
+                type="text"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                placeholder={isAr ? "كود التيكاث أو الرقم التسلسلي (مثال: 1S62A8KAT1EUV5HND516)..." : "Code-barres ou N° série (ex: 1S62A8KAT1EUV5HND516)..."}
+                className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
+              />
+              <button
+                type="submit"
+                className="bg-slate-800 hover:bg-slate-700 text-sky-400 px-3 py-1 rounded text-xs font-bold border border-slate-700 transition-colors"
+              >
+                {isAr ? 'بحث / مطابقة' : 'Rechercher'}
+              </button>
+            </form>
+
+            {manualRepairPreview && (
+              <div className="bg-emerald-950/80 border border-emerald-600/70 p-2 rounded text-[11px] flex items-center justify-between text-emerald-200 animate-fadeIn">
+                <div className="flex items-center gap-1.5 truncate">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="truncate">
+                    {isAr
+                      ? `تم كشف تشويش لوحة المفاتيح (${manualRepairPreview.detectedLayout === 'ARABIC_AR' ? 'عربي' : 'فرنسي AZERTY'}) -> النتيجة المصححة: ${manualRepairPreview.normalized}`
+                      : `Disposition ${manualRepairPreview.detectedLayout === 'ARABIC_AR' ? 'Arabe' : 'AZERTY'} corrigée automatiquement : ${manualRepairPreview.normalized}`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualCode(manualRepairPreview.normalized)}
+                  className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[10px] font-bold shrink-0 ml-2"
+                >
+                  {isAr ? 'تطبيق التصحيح' : 'Appliquer'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Recent Scan History Buffer Roll */}

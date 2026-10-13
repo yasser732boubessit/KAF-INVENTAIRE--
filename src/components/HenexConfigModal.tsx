@@ -12,9 +12,12 @@ import {
   Info,
   Barcode,
   CheckCircle2,
-  Cpu
+  Cpu,
+  ShieldCheck,
+  Globe
 } from 'lucide-react';
 import { ScannerHardwareConfig, DEFAULT_SCANNER_CONFIG } from '../utils/ticketParser';
+import { normalizeGarbledScanString } from '../utils/keyboardScannerEngine';
 import { Language } from '../types';
 
 interface HenexConfigModalProps {
@@ -34,6 +37,7 @@ export const HenexConfigModal: React.FC<HenexConfigModalProps> = ({
 }) => {
   const [current, setCurrent] = useState<ScannerHardwareConfig>({ ...config });
   const [activeTab, setActiveTab] = useState<'profile' | 'connection' | 'decoding' | 'barcodes'>('profile');
+  const [testInput, setTestInput] = useState('');
 
   if (!isOpen) return null;
 
@@ -344,6 +348,111 @@ export const HenexConfigModal: React.FC<HenexConfigModalProps> = ({
                     <option value="TAB">TAB (\t)</option>
                     <option value="NONE">AUCUN (Détection temporelle)</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Keyboard Layout Immunity & Multilingual Compatibility Card */}
+              <div className="bg-slate-900/90 border border-emerald-600/60 p-3.5 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-white block">
+                        {isAr ? 'مناعة كاملة ضد لغة الكيبورد (AZERTY / العربية / QWERTY)' : 'Immunité Totale Disposition Clavier (AZERTY / Arabe / EN)'}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {isAr 
+                          ? 'فك شفرة الباركود عبر Scan-Code العتادي المباشر لمنع ظهور رموز مشوهة (&é"\' أو حروف عربية)' 
+                          : 'Interception physique des Scan-Codes USB/BT évitant la corruption de caractères lors du scan'}
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={current.keyboardImmunityActive !== false}
+                    onChange={(e) => setCurrent({ ...current, keyboardImmunityActive: e.target.checked })}
+                    className="w-4 h-4 rounded text-emerald-500 bg-slate-800"
+                  />
+                </div>
+
+                <div className="border-t border-slate-800 pt-2.5 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-slate-200 block font-medium">
+                      {isAr ? 'التصحيح الهيورستي التلقائي للنصوص المنسوخة أو المدخلة' : 'Auto-réparation heuristique des saisies manuelles / collées'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {isAr ? 'يحول تلقائياً رموز AZERTY مثل &é"\' إلى أرقام، وحروف الكيبورد العربي إلى أحرف إنجليزية' : 'Transcode automatiquement &é"\'(-è_çà -> 0-9 et les touches clavier arabe'}
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={current.autoRepairKeyboardLayout !== false}
+                    onChange={(e) => setCurrent({ ...current, autoRepairKeyboardLayout: e.target.checked })}
+                    className="w-4 h-4 rounded text-emerald-500 bg-slate-800"
+                  />
+                </div>
+
+                {/* Interactive Live Layout Tester */}
+                <div className="border-t border-slate-800 pt-2.5 space-y-2">
+                  <span className="text-[11px] font-bold text-emerald-300 block">
+                    {isAr ? 'اختبار مباشر لتوافق لوحة المفاتيح واللغات:' : 'Zone de Test Direct Multilingue :'}
+                  </span>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={testInput}
+                      onChange={(e) => setTestInput(e.target.value)}
+                      placeholder={isAr ? "جرّب الكتابة بالكيبورد الفرنسي أو العربي هنا (مثال: AST-&à'çé أو شسف-10492)..." : "Tapez ou scannez en AZERTY ou Arabe (ex: AST-&à'çé ou شسف-10492)..."}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono"
+                    />
+                    {testInput && (
+                      <button
+                        type="button"
+                        onClick={() => setTestInput('')}
+                        className="px-2 py-1 text-[10px] bg-slate-800 text-slate-400 hover:text-white rounded"
+                      >
+                        {isAr ? 'مسح' : 'Effacer'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex gap-2 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setTestInput("AST-&à'çé")}
+                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded border border-slate-700 font-mono"
+                    >
+                      Test AZERTY: AST-&à'çé
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTestInput("شسف-10492")}
+                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded border border-slate-700 font-mono"
+                    >
+                      Test Arabe: شسف-10492
+                    </button>
+                  </div>
+
+                  {testInput && (() => {
+                    const res = normalizeGarbledScanString(testInput);
+                    return (
+                      <div className="p-2 bg-slate-950 border border-slate-800 rounded font-mono text-[10px] space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Entrée Brute : <span className="text-white">{testInput}</span></span>
+                          <span className={`px-1.5 py-0.2 rounded font-bold ${res.repaired ? 'bg-amber-950 text-amber-300' : 'bg-emerald-950 text-emerald-300'}`}>
+                            {res.detectedLayout || 'CLEAN'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-900 pt-1">
+                          <span>Sortie Décodée : {res.normalized}</span>
+                          <span>{res.repaired ? '✓ Corrigé avec succès' : '✓ Normalisé'}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

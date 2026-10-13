@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AuditLogEntry, UserRole, Language } from '../types';
 import { translations } from '../translations';
+import { UserRoleIcon } from './UserRoleIcon';
 
 interface AuditTrailViewProps {
   logs: AuditLogEntry[];
@@ -137,8 +138,13 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({
                       {log.timestamp}
                     </td>
                     <td className="p-3 border-e border-slate-100 whitespace-nowrap">
-                      <span className="font-bold text-slate-900">{log.userId}</span>
-                      <span className="block text-[10px] text-slate-500 font-sans">{log.userRole}</span>
+                      <div className="flex items-center gap-2">
+                        <UserRoleIcon role={log.userRole} size="xs" variant="avatar" lang={lang} />
+                        <div>
+                          <span className="font-bold text-slate-900 block">{log.userId}</span>
+                          <span className="block text-[10px] text-slate-500 font-sans">{log.userRole}</span>
+                        </div>
+                      </div>
                     </td>
                     <td className="p-3 border-e border-slate-100 whitespace-nowrap">
                       <span className="px-2 py-0.5 rounded font-bold text-[10px] bg-sky-100 text-sky-800 border border-sky-200">

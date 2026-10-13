@@ -29,6 +29,7 @@ import { authService } from '../security/authService';
 import { dbService } from '../services/databaseService';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { UserRoleIcon } from './UserRoleIcon';
 
 interface UserManagementViewProps {
   lang: Language;
@@ -465,15 +466,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                          {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt={user.fullName} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-white font-bold text-sm">
-                              {user.fullName.charAt(0)}
-                            </span>
-                          )}
-                        </div>
+                        <UserRoleIcon role={user.role} size="md" variant="avatar" lang={lang} />
 
                         <div>
                           <div className="flex items-center gap-2">
@@ -592,17 +585,25 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </div>
 
               {/* User Bio Card */}
-              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-slate-900">
-                    {selectedUser.fullName}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${ROLE_METADATA[selectedUser.role].badgeColor}`}>
-                    {ROLE_METADATA[selectedUser.role].labelFr}
-                  </span>
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg space-y-3">
+                <div className="flex items-center gap-3">
+                  <UserRoleIcon role={selectedUser.role} size="lg" variant="avatar" lang={lang} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-xs text-slate-900 truncate">
+                        {selectedUser.fullName}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 ${ROLE_METADATA[selectedUser.role].badgeColor}`}>
+                        {ROLE_METADATA[selectedUser.role].labelFr}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-500 block">
+                      @{selectedUser.username} &bull; {selectedUser.email}
+                    </span>
+                  </div>
                 </div>
 
-                <p className="text-[11px] text-slate-600 leading-relaxed">
+                <p className="text-[11px] text-slate-600 leading-relaxed border-t border-slate-200/80 pt-2">
                   {ROLE_METADATA[selectedUser.role].descriptionFr}
                 </p>
 

@@ -22,6 +22,7 @@ import { translations } from '../translations';
 import { sound } from '../utils/audio';
 import { KafLogo } from './KafLogo';
 import { LogoManagerModal } from './LogoManagerModal';
+import { UserRoleIcon } from './UserRoleIcon';
 
 interface TopOperationalStripProps {
   activeScreen: ActiveScreen;
@@ -327,7 +328,7 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
 
           {/* Rôle et Profil Utilisateur (3 profils officiels KAF-INVENTAIRE) */}
           <div className="flex items-center gap-1.5 bg-neutral-900 border border-neutral-700 px-2.5 py-1 rounded text-[11px]">
-            <UserRound className="w-3.5 h-3.5 text-purple-400" />
+            <UserRoleIcon role={userRole} size="xs" variant="icon-only" lang={lang} />
             <select
               value={userRole}
               onChange={(e) => onRoleChange(e.target.value as UserRole)}
