@@ -139,7 +139,64 @@ export type ActiveScreen =
   | 'checklist' 
   | 'reports' 
   | 'desktop'
-  | 'users';
+  | 'users'
+  | 'sync_center';
+
+// Backend KAF INVENTAIRE Workflow & Sync Types (NestJS + PostgreSQL 16 Architecture)
+export type BackendRole = 'TEAM_1' | 'TEAM_2' | 'TEAM_3' | 'ADMIN';
+export type BackendWorkflowState = 'AJOUTE' | 'SYNCHRONISE' | 'VERIFIE' | 'CHARGE' | 'REJETE';
+export type BackendPhysicalState = 'ACTIF' | 'EN_PANNE' | 'EN_MAINTENANCE' | 'EN_STOCK' | 'HORS_SERVICE' | 'REFORME';
+
+export interface BackendSyncBatchResult {
+  success: boolean;
+  batchId: string;
+  processedCount: number;
+  successes: Array<{
+    id: string;
+    assetId: string;
+    type: string;
+    workflowState: BackendWorkflowState;
+    message?: string;
+  }>;
+  conflicts: Array<{
+    id: string;
+    mutationId: string;
+    assetId: string;
+    reason: string;
+    serverState: Record<string, any>;
+    clientState: Record<string, any>;
+  }>;
+  duplicates: string[];
+  serverTimestamp: string;
+}
+
+export interface ApiHttpLog {
+  id: string;
+  timestamp: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  endpoint: string;
+  status: number;
+  durationMs: number;
+  role?: string;
+  requestPayload?: any;
+  responsePayload?: any;
+  error?: string | null;
+}
+
+export interface BackendConnectionStatus {
+  isConnected: boolean;
+  status: 'ONLINE' | 'OFFLINE' | 'CONNECTING' | 'ERROR';
+  apiUrl: string;
+  target: 'INTERNAL_EXPRESS' | 'EXTERNAL_NESTJS';
+  latencyMs: number;
+  database: string;
+  redis: string;
+  deviceId: string;
+  registered: boolean;
+  activeRole: BackendRole;
+  token: string | null;
+  lastSyncAt: string | null;
+}
 
 export interface SQLiteDatabaseStats {
   engine: 'ELECTRON_SQLITE' | 'BROWSER_INDEXEDDB_SQLITE';

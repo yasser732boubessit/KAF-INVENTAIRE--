@@ -15,7 +15,8 @@ import {
   ChevronDown,
   Volume2,
   VolumeX,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Server
 } from 'lucide-react';
 import { ActiveScreen, Language, UserRole } from '../types';
 import { translations } from '../translations';
@@ -133,6 +134,22 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
             <HardDrive className="w-3 h-3 text-[#16A34A]" />
             <span className="text-[10px] font-mono">
               {isElectron ? 'SQLITE NATIVE (WAL)' : 'SQLITE OFFLINE ENGINE'}
+            </span>
+          </button>
+
+          {/* Backend NestJS / Sync Test Center Button */}
+          <button
+            onClick={() => setActiveScreen('sync_center')}
+            className={`hidden xl:flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors ${
+              activeScreen === 'sync_center'
+                ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                : 'bg-neutral-900 border-neutral-800 hover:border-emerald-600 text-neutral-300 hover:text-white'
+            }`}
+            title={lang === 'ar' ? 'فتح مركز مزامنة واختبار الباك إند (Alt+S)' : 'Ouvrir le banc d\'essai et moteur de synchronisation backend (Alt+S)'}
+          >
+            <Server className="w-3 h-3 text-emerald-400" />
+            <span className="text-[10px] font-mono">
+              BACKEND SYNC (PG16)
             </span>
           </button>
 

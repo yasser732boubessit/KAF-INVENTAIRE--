@@ -17,7 +17,8 @@ import {
   Activity,
   Volume2,
   VolumeX,
-  Users
+  Users,
+  Server
 } from 'lucide-react';
 import { ActiveScreen, Language, UserRole } from '../types';
 import { translations } from '../translations';
@@ -157,6 +158,12 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       label: t.screenUsers || "Utilisateurs & Permissions", 
       icon: <Users className="w-4 h-4 shrink-0 text-purple-400" />, 
       shortcut: 'Alt+U' 
+    },
+    { 
+      id: 'sync_center', 
+      label: t.screenSyncCenter || "Testeur Backend & Sync", 
+      icon: <Server className="w-4 h-4 shrink-0 text-emerald-400" />, 
+      shortcut: 'Alt+S' 
     },
   ];
 
