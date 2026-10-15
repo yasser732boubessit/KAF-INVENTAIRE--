@@ -25,5 +25,5 @@
     "noEmit": true
   },
   "include": ["src", "server.ts", "vite.config.ts"],
-  "exclude": ["node_modules", "backend", "dist-electron"]
+  "exclude": ["node_modules", "backend", "frontend", "dist-electron"]
 }
