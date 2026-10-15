@@ -72,9 +72,44 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
   const canManageUsers = currentUserRole === 'RESPONSABLE_PATRIMOINE';
 
+  const getAuthHeaders = () => {
+    const session = authService.getSession();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    if (session?.token && !session.isOffline) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+    return headers;
+  };
+
   const loadUsers = async () => {
     setIsLoading(true);
     try {
+      // 1. Attempt central API fetch if online
+      try {
+        const res = await fetch('/api/users', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.users && Array.isArray(data.users)) {
+            setUsers(data.users);
+            if (data.users.length > 0 && !selectedUser) {
+              setSelectedUser(data.users[0]);
+            }
+            // Cache locally
+            for (const u of data.users) {
+              try { await dbService.createUser(u); } catch {}
+            }
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (netErr) {
+        // Fallback to local
+      }
+
+      // 2. Fallback to local database engine
       const data = await dbService.getUsers();
       setUsers(data);
       if (data.length > 0 && !selectedUser) {
@@ -139,19 +174,45 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       return;
     }
 
-    // Check unique username
+    // Check unique username locally
     if (users.some(u => u.username.toLowerCase() === formUsername.trim().toLowerCase())) {
       showFeedback('error', 'Ce nom d\'utilisateur est déjà utilisé.');
       return;
     }
 
     try {
+      // 1. Call Central Backend API if online
+      let serverCreatedUser: any = null;
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            username: formUsername.trim().toLowerCase(),
+            fullName: formFullName.trim(),
+            email: formEmail.trim(),
+            role: formRole,
+            password: formPassword
+          })
+        });
+
+        if (res.ok) {
+          serverCreatedUser = await res.json();
+        } else if (res.status === 409) {
+          const errData = await res.json();
+          showFeedback('error', errData.message || 'Identifiant ou adresse e-mail déjà existant.');
+          return;
+        }
+      } catch (netErr) {
+        console.warn('Backend creation offline fallback:', netErr);
+      }
+
       const passwordHash = await CryptoSecurity.hashPassword(formPassword);
-      const newUser: AppUser = {
+      const newUser: AppUser = serverCreatedUser || {
         id: `USR-${Math.floor(100 + Math.random() * 899)}`,
         username: formUsername.trim().toLowerCase(),
         fullName: formFullName.trim(),
-        email: formEmail.trim(),
+        email: formEmail.trim() || `${formUsername.trim().toLowerCase()}@kotama-agrifood.dz`,
         role: formRole,
         isActive: true,
         passwordHash,
@@ -180,7 +241,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           newUser.id,
           'NULL',
           `Role: ${newUser.role}, User: ${newUser.username}`,
-          'Création d\'un nouveau compte avec permissions RBAC'
+          'Création d\'un nouveau compte avec permissions RBAC par l\'administrateur'
         );
       }
     } catch (err: any) {
@@ -198,6 +259,26 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
     try {
       const oldRole = selectedUser.role;
+
+      // Call Central API if online
+      try {
+        await fetch(`/api/users/${selectedUser.id}`, {
+          method: 'PATCH',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            fullName: formFullName.trim(),
+            email: formEmail.trim()
+          })
+        });
+        if (oldRole !== formRole) {
+          await fetch(`/api/users/${selectedUser.id}/role`, {
+            method: 'PATCH',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ role: formRole })
+          });
+        }
+      } catch {}
+
       const updated = await dbService.updateUser(selectedUser.id, {
         fullName: formFullName.trim(),
         email: formEmail.trim(),
@@ -242,6 +323,16 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
     try {
       const nextStatus = !user.isActive;
+
+      // Call central backend if online
+      try {
+        await fetch(`/api/users/${user.id}/status`, {
+          method: 'PATCH',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ isActive: nextStatus })
+        });
+      } catch {}
+
       await dbService.setUserActiveStatus(user.id, nextStatus);
 
       const updated = { ...user, isActive: nextStatus };
@@ -281,7 +372,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     }
 
     if (newPassword.length < 6) {
-      showFeedback('error', 'Le nouveau mot de passe doit comporter au moins 6 caractères.');
+      showFeedback('error', 'Le mot de passe doit comporter au moins 6 caractères.');
       return;
     }
 
@@ -291,26 +382,38 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     }
 
     try {
-      const hash = await CryptoSecurity.hashPassword(newPassword);
-      await dbService.resetUserPassword(selectedUser.id, hash);
+      // Call Central API if online
+      try {
+        await fetch(`/api/users/${selectedUser.id}/reset-password`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ newPassword })
+        });
+      } catch {}
 
+      const newPasswordHash = await CryptoSecurity.hashPassword(newPassword);
+      await dbService.resetUserPassword(selectedUser.id, newPasswordHash);
+
+      const updated = { ...selectedUser, passwordHash: newPasswordHash };
+      setUsers(prev => prev.map(u => u.id === selectedUser.id ? updated : u));
+      setSelectedUser(updated);
       setIsPasswordModalOpen(false);
       setNewPassword('');
       setConfirmNewPassword('');
 
-      showFeedback('success', `Mot de passe réinitialisé pour l'utilisateur ${selectedUser.username}.`);
+      showFeedback('success', `Mot de passe réinitialisé avec succès pour ${selectedUser.username}.`);
 
       if (onAuditLog) {
         onAuditLog(
           'REINITIALISATION_MOT_DE_PASSE',
           selectedUser.id,
-          'HASH_ANCIEN',
-          'HASH_NOUVEAU',
-          'Réinitialisation administrative du mot de passe'
+          'PASSWORD_HASH',
+          'NEW_PASSWORD_HASH',
+          `Réinitialisation administrative du mot de passe pour ${selectedUser.username}`
         );
       }
     } catch (err: any) {
-      showFeedback('error', `Erreur: ${err.message}`);
+      showFeedback('error', `Erreur: ${err.message || 'Impossible de réinitialiser le mot de passe'}`);
     }
   };
 

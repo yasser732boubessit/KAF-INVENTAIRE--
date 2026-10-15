@@ -16,7 +16,9 @@ import {
   Volume2,
   VolumeX,
   Image as ImageIcon,
-  Server
+  Server,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 import { ActiveScreen, Language, UserRole } from '../types';
 import { translations } from '../translations';
@@ -24,6 +26,7 @@ import { sound } from '../utils/audio';
 import { KafLogo } from './KafLogo';
 import { LogoManagerModal } from './LogoManagerModal';
 import { UserRoleIcon } from './UserRoleIcon';
+import { AppUser } from '../security/permissions';
 
 interface TopOperationalStripProps {
   activeScreen: ActiveScreen;
@@ -43,6 +46,9 @@ interface TopOperationalStripProps {
   activeCampaignTitle?: string;
   activeCampaignProgress?: number;
   isElectron?: boolean;
+  currentUser?: AppUser | null;
+  onLogout?: () => void;
+  isOfflineSession?: boolean;
 }
 
 export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
@@ -63,6 +69,9 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
   activeCampaignTitle = 'CAMP-2026-Q1',
   activeCampaignProgress = 75,
   isElectron = false,
+  currentUser = null,
+  onLogout,
+  isOfflineSession = false,
 }) => {
   const t = translations[lang];
   const [searchQuery, setSearchQuery] = useState('');
@@ -346,6 +355,19 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
           {/* Rôle et Profil Utilisateur (3 profils officiels KAF-INVENTAIRE) */}
           <div className="flex items-center gap-1.5 bg-neutral-900 border border-neutral-700 px-2.5 py-1 rounded text-[11px]">
             <UserRoleIcon role={userRole} size="xs" variant="icon-only" lang={lang} />
+            <div className="flex items-center gap-1">
+              {currentUser && (
+                <span className="font-semibold text-neutral-200 max-w-[120px] truncate hidden lg:inline" title={currentUser.fullName}>
+                  {currentUser.fullName}
+                </span>
+              )}
+              {isOfflineSession && (
+                <span className="text-[9px] bg-amber-950/80 text-amber-300 border border-amber-800/80 px-1.5 py-0.2 rounded font-mono font-bold">
+                  OFFLINE
+                </span>
+              )}
+            </div>
+
             <select
               value={userRole}
               onChange={(e) => onRoleChange(e.target.value as UserRole)}
@@ -353,26 +375,44 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
               title={t.currentRole}
             >
               <option value="RESPONSABLE_PATRIMOINE" className="bg-neutral-900 text-white">
-                {lang === 'fr' ? '1. Administrateur (Gouvernance)' : lang === 'ar' ? '1. المسؤول العام (إدارة كاملة)' : '1. Administrator (Full)'}
+                {lang === 'fr' ? '1. Administrateur' : lang === 'ar' ? '1. المسؤول العام' : '1. Administrator'}
               </option>
               <option value="AGENT_INVENTAIRE" className="bg-neutral-900 text-white">
-                {lang === 'fr' ? '2. Agent d\'Ajout / Identification' : lang === 'ar' ? '2. وكيل الإضافة والتعريف' : '2. Identification Agent'}
+                {lang === 'fr' ? '2. Agent d\'Ajout' : lang === 'ar' ? '2. وكيل الإضافة' : '2. Identification Agent'}
               </option>
               <option value="CONTROLEUR_ZONE" className="bg-neutral-900 text-white">
-                {lang === 'fr' ? '3. Agent de Vérification / Chargement' : lang === 'ar' ? '3. وكيل التحقق والمراقبة والشحن' : '3. Verification & Loading'}
+                {lang === 'fr' ? '3. Agent de Vérification' : lang === 'ar' ? '3. وكيل التحقق' : '3. Verification & Loading'}
               </option>
             </select>
             {userRole === 'RESPONSABLE_PATRIMOINE' && (
               <button
                 type="button"
                 onClick={() => setActiveScreen('users')}
-                className="ml-1 text-purple-400 hover:text-purple-300 font-bold text-[10px]"
-                title="Gérer les comptes et les permissions"
+                className="ml-1 text-purple-400 hover:text-purple-300 font-bold text-[10px] px-1 py-0.5 rounded bg-purple-950/40 border border-purple-800/60"
+                title={lang === 'ar' ? 'إدارة المستخدمين والصلاحيات (مسؤول)' : 'Gestion des utilisateurs et permissions (Admin)'}
               >
-                ⚙️
+                ⚙️ {lang === 'ar' ? 'المستخدمين' : 'Comptes'}
               </button>
             )}
           </div>
+
+          {/* Bouton de Déconnexion Sécurisé (Logout Button) */}
+          {onLogout && (
+            <button
+              type="button"
+              onClick={() => {
+                sound.playTap();
+                onLogout();
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-red-950/50 hover:bg-red-900/70 border border-red-800/80 hover:border-red-700 text-red-200 hover:text-white rounded text-[11px] font-medium transition-colors cursor-pointer"
+              title={lang === 'ar' ? 'تسجيل الخروج وقفل الجلسة' : 'Se déconnecter et verrouiller le terminal'}
+            >
+              <LogOut className="w-3.5 h-3.5 text-red-400" />
+              <span className="hidden sm:inline">
+                {lang === 'ar' ? 'خروج' : 'Déconnexion'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 

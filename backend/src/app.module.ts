@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { AssetsModule } from './assets/assets.module';
 import { SyncModule } from './sync/sync.module';
 import { VerificationModule } from './verification/verification.module';
@@ -12,6 +13,7 @@ import { AppController } from './app.controller';
 @Module({
   imports: [
     AuthModule,
+    UsersModule,
     AssetsModule,
     SyncModule,
     VerificationModule,

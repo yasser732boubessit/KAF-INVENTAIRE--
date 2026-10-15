@@ -43,16 +43,19 @@ import { DesktopDatabaseCenter } from './components/DesktopDatabaseCenter';
 import { UserManagementView } from './components/UserManagementView';
 import { BackendSyncCenterView } from './components/BackendSyncCenterView';
 import { NewAssetModal } from './components/NewAssetModal';
+import { LoginScreen } from './components/LoginScreen';
 import { sound } from './utils/audio';
 import { dbService } from './services/databaseService';
 import { centralSyncService } from './services/centralSyncService';
 import { authService } from './security/authService';
-import { hasPermission } from './security/permissions';
+import { hasPermission, UserSession } from './security/permissions';
+import { ShieldAlert } from 'lucide-react';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('fr');
+  const [session, setSession] = useState<UserSession | null>(() => authService.getSession());
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('cockpit');
-  const [userRole, setUserRole] = useState<UserRole>('RESPONSABLE_PATRIMOINE');
+  const [userRole, setUserRole] = useState<UserRole>(() => authService.getSession()?.user?.role || 'RESPONSABLE_PATRIMOINE');
   const [currentScanningBay, setCurrentScanningBay] = useState<string>('BAY-04');
 
   // 1. Persistent Assets Store
@@ -136,6 +139,23 @@ export default function App() {
     document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
     document.documentElement.setAttribute('lang', lang);
   }, [lang]);
+
+  // Subscribe to Authentication Session
+  useEffect(() => {
+    const unsub = authService.subscribe((s) => {
+      setSession(s);
+      if (s?.user) {
+        setUserRole(s.user.role);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleLogout = async () => {
+    await authService.logout();
+    sound.playTap();
+    setActiveScreen('cockpit');
+  };
 
   // Global Keyboard Navigation (Alt+1 through Alt+9, Alt+0 for Desktop)
   useEffect(() => {
@@ -840,6 +860,22 @@ export default function App() {
   const pendingDiscoveriesCount = discoveries.filter(d => d.status === 'EN_ATTENTE_REVUE').length;
   const missingAssets = assets.filter(a => a.inventoryStatus === 'MANQUANT');
 
+  // Enforce Login Gate: unauthenticated users MUST log in via LoginScreen
+  if (!session) {
+    return (
+      <LoginScreen
+        lang={lang}
+        setLang={setLang}
+        onLoginSuccess={(user, isOffline) => {
+          const freshSession = authService.getSession();
+          setSession(freshSession);
+          setUserRole(user.role);
+          sound.playScanSuccess();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen h-screen flex flex-col bg-[#F8FAFC] text-[#0F172A] overflow-hidden select-none">
       {/* Unified Industrial ERP Compact System Navbar */}
@@ -853,7 +889,11 @@ export default function App() {
         pendingMutationCount={mutations.filter(m => m.syncStatus === 'PENDING').length}
         conflictCount={conflicts.length}
         userRole={userRole}
-        onRoleChange={setUserRole}
+        onRoleChange={(newRole) => {
+          if (session?.user?.role === 'RESPONSABLE_PATRIMOINE') {
+            setUserRole(newRole);
+          }
+        }}
         onQuickSearch={handleQuickSearch}
         onFlushQueue={handleFlushQueue}
         isFlushing={isFlushing}
@@ -861,6 +901,9 @@ export default function App() {
         activeCampaignTitle={campaign.title}
         activeCampaignProgress={campaign.progressPercent ?? (campaign.zones.length > 0 ? Math.round((campaign.zones.filter(z => z.isClosed).length / campaign.zones.length) * 100) : 75)}
         isElectron={dbService.isElectron()}
+        currentUser={session?.user}
+        onLogout={handleLogout}
+        isOfflineSession={session?.isOffline}
       />
 
       {/* Main Workspace with Vertical Sidebar Anchored on the Right */}
@@ -1000,13 +1043,35 @@ export default function App() {
 
           {/* Screen 11: Enterprise RBAC User & Permissions Management */}
           {activeScreen === 'users' && (
-            <UserManagementView
-              lang={lang}
-              currentUserRole={userRole}
-              onAuditLog={(action, entityId, oldValue, newValue, reason) => {
-                addAuditLog(action, entityId, oldValue, newValue, reason);
-              }}
-            />
+            userRole === 'RESPONSABLE_PATRIMOINE' ? (
+              <UserManagementView
+                lang={lang}
+                currentUserRole={userRole}
+                onAuditLog={(action, entityId, oldValue, newValue, reason) => {
+                  addAuditLog(action, entityId, oldValue, newValue, reason);
+                }}
+              />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#0B0F17] text-white">
+                <div className="w-16 h-16 rounded-2xl bg-red-950/50 border border-red-800/80 flex items-center justify-center text-red-400 mb-4 shadow-xl">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold mb-2">
+                  {lang === 'ar' ? 'غير مصرح لك بالوصول (Accès Refusé)' : 'Accès Refusé — Zone Réservée'}
+                </h2>
+                <p className="text-xs text-neutral-400 max-w-md mb-6 leading-relaxed">
+                  {lang === 'ar'
+                    ? 'إدارة حسابات المستخدمين وصلاحيات المنظومة مقتصرة حصرياً على المسؤول العام (RESPONSABLE_PATRIMOINE). تم تسجيل محاولة الوصول في سجل التدقيق.'
+                    : 'La gestion des utilisateurs et des permissions de la plateforme est réservée exclusivement au Responsable du Patrimoine (Administrateur). Cette tentative a été tracée dans la piste d\'audit.'}
+                </p>
+                <button
+                  onClick={() => setActiveScreen('cockpit')}
+                  className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  {lang === 'ar' ? 'العودة لمقصورة العمليات' : 'Retourner au Cockpit'}
+                </button>
+              </div>
+            )
           )}
 
           {/* Screen 12: Backend Synchronization Engine & NestJS Test Center */}

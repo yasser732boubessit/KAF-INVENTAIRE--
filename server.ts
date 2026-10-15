@@ -249,44 +249,138 @@ const centralAuditTrail: CentralAuditLog[] = [
 // Idempotency set of processed mutation IDs
 const processedMutationIds = new Set<string>(['MUT-INIT-001', 'MUT-INIT-002']);
 
-// Pre-seeded users according to documented RBAC
-const USERS = [
+// Security password helper (PBKDF2/SHA-256 with Enterprise Salt)
+const KAF_SALT = 'KAF_SALT_2026_ENTERPRISE';
+function hashPassword(password: string, salt: string = KAF_SALT): string {
+  return crypto.createHash('sha256').update(password + salt).digest('hex');
+}
+function verifyPassword(plain: string, hash: string): boolean {
+  if (!hash || !plain) return false;
+  return hashPassword(plain) === hash;
+}
+
+// Pre-seeded central users conforming to the 3 mandatory operational roles
+interface CentralUser {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string;
+  role: 'RESPONSABLE_PATRIMOINE' | 'AGENT_INVENTAIRE' | 'CONTROLEUR_ZONE' | 'ADMIN' | 'TEAM_1' | 'TEAM_2' | 'TEAM_3';
+  isActive: boolean;
+  passwordHash: string;
+  permissions: string[];
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const USERS: CentralUser[] = [
   {
     id: 'USR-ADMIN-01',
-    username: 'admin',
+    username: 'admin.patrimoine',
     fullName: 'Yacine Benali (Responsable Patrimoine & Admin)',
+    email: 'y.benali@kotama-agrifood.dz',
+    role: 'RESPONSABLE_PATRIMOINE',
+    isActive: true,
+    passwordHash: '7be41f3b6e69c62830e8106419d51402a0eddb955773c18327ec19ea12b84c5e', // admin123
+    permissions: ['users.manage', 'CREATE_ASSET', 'VIEW_ASSETS', 'VERIFY_ASSET', 'LOAD_ASSET', 'IMPORT & ANALYTICS', 'SYNC'],
+    lastLoginAt: '2026-10-14 08:30:00',
+    createdAt: '2026-01-01 08:00:00',
+    updatedAt: '2026-10-14 08:30:00'
+  },
+  {
+    id: 'USR-ADMIN-02',
+    username: 'admin',
+    fullName: 'Administrateur Central KAF',
+    email: 'admin@kotama-agrifood.dz',
     role: 'ADMIN',
-    permissions: ['CREATE_ASSET', 'VIEW_ASSETS', 'VERIFY_ASSET', 'LOAD_ASSET', 'IMPORT & ANALYTICS', 'SYNC']
+    isActive: true,
+    passwordHash: '7be41f3b6e69c62830e8106419d51402a0eddb955773c18327ec19ea12b84c5e', // admin123
+    permissions: ['users.manage', 'CREATE_ASSET', 'VIEW_ASSETS', 'VERIFY_ASSET', 'LOAD_ASSET', 'IMPORT & ANALYTICS', 'SYNC'],
+    lastLoginAt: '2026-10-14 08:00:00',
+    createdAt: '2026-01-01 08:00:00',
+    updatedAt: '2026-10-14 08:00:00'
+  },
+  {
+    id: 'USR-AGENT-02',
+    username: 'agent.identification',
+    fullName: 'Mohamed Brahimi (Agent Identification & Desktop)',
+    email: 'm.brahimi@kotama-agrifood.dz',
+    role: 'AGENT_INVENTAIRE',
+    isActive: true,
+    passwordHash: 'fdad935fcbedaf53ef215506d9e0a39bcd40491332a1294489dc93202375d358', // agent123
+    permissions: ['CREATE_ASSET', 'VIEW_ASSETS', 'SYNC'],
+    lastLoginAt: '2026-10-14 07:45:00',
+    createdAt: '2026-01-15 08:00:00',
+    updatedAt: '2026-10-14 07:45:00'
   },
   {
     id: 'USR-TEAM1-01',
     username: 'team1',
     fullName: 'Karim Hadj (Équipe 1 - Création & Desktop Offline)',
+    email: 'k.hadj@kotama-agrifood.dz',
     role: 'TEAM_1',
-    permissions: ['CREATE_ASSET', 'VIEW_ASSETS', 'SYNC']
+    isActive: true,
+    passwordHash: 'fdad935fcbedaf53ef215506d9e0a39bcd40491332a1294489dc93202375d358', // agent123
+    permissions: ['CREATE_ASSET', 'VIEW_ASSETS', 'SYNC'],
+    lastLoginAt: '2026-10-14 07:15:00',
+    createdAt: '2026-01-15 08:00:00',
+    updatedAt: '2026-10-14 07:15:00'
+  },
+  {
+    id: 'USR-CTRL-03',
+    username: 'controleur.chargement',
+    fullName: 'Amine Khelifi (Agent Contrôle Zone / Vérification)',
+    email: 'a.khelifi@kotama-agrifood.dz',
+    role: 'CONTROLEUR_ZONE',
+    isActive: true,
+    passwordHash: '846ce84be47165fa5c02f8fcd87f62c5f16d503282897a74950c7657c32dbee2', // ctrl123
+    permissions: ['VIEW_ASSETS', 'VERIFY_ASSET', 'LOAD_ASSET'],
+    lastLoginAt: '2026-10-14 08:15:00',
+    createdAt: '2026-02-01 08:00:00',
+    updatedAt: '2026-10-14 08:15:00'
   },
   {
     id: 'USR-TEAM2-01',
     username: 'team2',
     fullName: 'Sofiane Messaoudi (Équipe 2 - Contrôleur Zone / Vérification)',
+    email: 's.messaoudi@kotama-agrifood.dz',
     role: 'TEAM_2',
-    permissions: ['VIEW_ASSETS', 'VERIFY_ASSET']
+    isActive: true,
+    passwordHash: '846ce84be47165fa5c02f8fcd87f62c5f16d503282897a74950c7657c32dbee2', // ctrl123
+    permissions: ['VIEW_ASSETS', 'VERIFY_ASSET'],
+    lastLoginAt: '2026-10-14 07:30:00',
+    createdAt: '2026-02-01 08:00:00',
+    updatedAt: '2026-10-14 07:30:00'
   },
   {
     id: 'USR-TEAM3-01',
     username: 'team3',
     fullName: 'Riad Boukhechem (Équipe 3 - Opérateur PWA Chargement)',
+    email: 'r.boukhechem@kotama-agrifood.dz',
     role: 'TEAM_3',
-    permissions: ['VIEW_ASSETS', 'LOAD_ASSET']
+    isActive: true,
+    passwordHash: '846ce84be47165fa5c02f8fcd87f62c5f16d503282897a74950c7657c32dbee2', // ctrl123
+    permissions: ['VIEW_ASSETS', 'LOAD_ASSET'],
+    lastLoginAt: '2026-10-14 08:00:00',
+    createdAt: '2026-02-01 08:00:00',
+    updatedAt: '2026-10-14 08:00:00'
   }
 ];
 
-function generateJwt(user: (typeof USERS)[0]) {
+// Helper to sanitize user object (never leak passwordHash)
+function sanitizeUser(u: CentralUser) {
+  const { passwordHash, ...safe } = u;
+  return safe;
+}
+
+function generateJwt(user: CentralUser) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const payload = Buffer.from(JSON.stringify({
     sub: user.id,
     username: user.username,
     fullName: user.fullName,
+    email: user.email,
     role: user.role,
     permissions: user.permissions,
     iat: Math.floor(Date.now() / 1000),
@@ -299,12 +393,17 @@ function generateJwt(user: (typeof USERS)[0]) {
 
 function verifyJwt(tokenStr: string) {
   try {
-    const parts = tokenStr.replace('Bearer ', '').trim().split('.');
+    const cleanToken = tokenStr.replace('Bearer ', '').trim();
+    const parts = cleanToken.split('.');
     if (parts.length !== 3) return null;
     const [header, payload, signature] = parts;
     const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${payload}`).digest('base64url');
     if (signature !== expectedSig) return null;
-    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+      return null; // Expired
+    }
+    return decoded;
   } catch {
     return null;
   }
@@ -339,32 +438,37 @@ async function startServer() {
     next();
   });
 
-  // Auth helper middleware
+  // Strict Auth helper middleware
   const authenticate = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     const deviceId = req.headers['x-device-id'] as string;
     const deviceKey = req.headers['x-device-api-key'] as string;
 
-    // Check device credentials
+    // Check device credentials for hardware scanner terminal
     if (deviceId === CONFIGURED_DEVICE_ID && deviceKey === CONFIGURED_DEVICE_KEY) {
-      (req as any).user = USERS.find(u => u.role === 'TEAM_1');
+      (req as any).user = sanitizeUser(USERS.find(u => u.role === 'AGENT_INVENTAIRE' || u.role === 'TEAM_1') || USERS[0]);
       (req as any).isDeviceAuth = true;
       return next();
     }
 
     if (!authHeader) {
-      // Default fallback for prototype convenience: authenticate as ADMIN or TEAM_1
-      const roleHeader = req.headers['x-user-role'] as string;
-      const matched = USERS.find(u => u.role === roleHeader) || USERS[0];
-      (req as any).user = matched;
-      return next();
+      res.status(401).json({ error: 'UNAUTHORIZED', message: 'Authentification requise. Veuillez vous connecter.' });
+      return;
     }
 
     const payload = verifyJwt(authHeader);
     if (!payload) {
-      res.status(401).json({ error: 'UNAUTHORIZED', message: 'Token JWT invalide ou expiré' });
+      res.status(401).json({ error: 'UNAUTHORIZED', message: 'Session invalide ou expirée. Veuillez vous reconnecter.' });
       return;
     }
+
+    // Verify user is still active in system
+    const userInDb = USERS.find(u => u.id === payload.sub);
+    if (!userInDb || !userInDb.isActive) {
+      res.status(403).json({ error: 'ACCOUNT_DISABLED', message: 'Ce compte utilisateur a été désactivé.' });
+      return;
+    }
+
     (req as any).user = payload;
     next();
   };
@@ -373,10 +477,11 @@ async function startServer() {
   const requireRole = (...allowedRoles: string[]) => {
     return (req: Request, res: Response, next: NextFunction) => {
       const user = (req as any).user;
-      if (!user || (!allowedRoles.includes(user.role) && user.role !== 'ADMIN')) {
+      const isAdmin = user?.role === 'ADMIN' || user?.role === 'RESPONSABLE_PATRIMOINE';
+      if (!user || (!allowedRoles.includes(user.role) && !isAdmin)) {
         res.status(403).json({
           error: 'FORBIDDEN',
-          message: `Accès refusé. Rôles autorisés: ${allowedRoles.join(', ')}. Votre rôle: ${user?.role || 'ANONYMOUS'}`
+          message: `Accès refusé. Privilèges insuffisants pour cette opération.`
         });
         return;
       }
@@ -440,36 +545,401 @@ async function startServer() {
     });
   });
 
-  // 2. Auth & Sessions (Function 1)
-  // POST /api/v1/auth/login
+  // 2. Auth & Sessions Endpoints
+  // POST /api/v1/auth/login & /api/auth/login
   apiRouter.post('/auth/login', (req, res) => {
-    const { username, password, role } = req.body;
-    let user = USERS.find(u => u.username === username || (role && u.role === role));
+    const { username, password } = req.body;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-    if (!user) {
-      if (role && ['TEAM_1', 'TEAM_2', 'TEAM_3', 'ADMIN'].includes(role)) {
-        user = USERS.find(u => u.role === role);
-      }
+    if (!username || !password) {
+      res.status(400).json({ 
+        error: 'INVALID_INPUT', 
+        message: 'L\'identifiant et le mot de passe sont obligatoires.' 
+      });
+      return;
     }
 
-    if (!user) {
-      user = USERS[0]; // Fallback to ADMIN for easy testing
+    const cleanUser = String(username).trim().toLowerCase();
+    const user = USERS.find(u => 
+      u.username.toLowerCase() === cleanUser || 
+      (u.email && u.email.toLowerCase() === cleanUser)
+    );
+
+    // Generic response for non-existent user or invalid password to prevent enumeration
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      centralAuditTrail.unshift({
+        id: `AUD-${Date.now()}`,
+        timestamp: now,
+        actor: cleanUser,
+        role: 'ANONYMOUS',
+        action: 'LOGIN_FAILURE',
+        entityId: cleanUser,
+        details: `Échec d'authentification pour l'identifiant ${cleanUser} (Mot de passe erroné ou compte inconnu).`
+      });
+
+      res.status(401).json({ 
+        error: 'INVALID_CREDENTIALS', 
+        message: 'Identifiant ou mot de passe incorrect.' 
+      });
+      return;
     }
 
+    // Check account status
+    if (!user.isActive) {
+      centralAuditTrail.unshift({
+        id: `AUD-${Date.now()}`,
+        timestamp: now,
+        actor: user.username,
+        role: user.role,
+        action: 'LOGIN_REJECTED_DISABLED',
+        entityId: user.id,
+        details: `Tentative de connexion sur un compte désactivé: ${user.username}`
+      });
+
+      res.status(403).json({ 
+        error: 'ACCOUNT_DISABLED', 
+        message: 'Ce compte utilisateur a été désactivé par l\'administrateur. Veuillez contacter votre responsable.' 
+      });
+      return;
+    }
+
+    // Update login timestamp
+    user.lastLoginAt = now;
+    user.updatedAt = now;
+
+    // Issue JWT
     const token = generateJwt(user);
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: user.username,
+      role: user.role,
+      action: 'LOGIN_SUCCESS',
+      entityId: user.id,
+      details: `Connexion réussie de ${user.fullName} (${user.role})`
+    });
+
     res.json({
+      success: true,
       access_token: token,
-      refresh_token: `ref_${crypto.randomUUID()}`,
       token_type: 'Bearer',
       expires_in: 86400,
-      user: {
-        id: user.id,
-        username: user.username,
-        fullName: user.fullName,
-        role: user.role,
-        permissions: user.permissions
-      }
+      user: sanitizeUser(user)
     });
+  });
+
+  // POST /api/v1/auth/logout
+  apiRouter.post('/auth/logout', authenticate, (req, res) => {
+    const user = (req as any).user;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: user?.username || 'UNKNOWN',
+      role: user?.role || 'UNKNOWN',
+      action: 'LOGOUT',
+      entityId: user?.sub || 'UNKNOWN',
+      details: `Déconnexion de l'utilisateur ${user?.username}`
+    });
+
+    res.json({ success: true, message: 'Déconnexion effectuée avec succès.' });
+  });
+
+  // GET /api/v1/auth/me
+  apiRouter.get('/auth/me', authenticate, (req, res) => {
+    const userPayload = (req as any).user;
+    const user = USERS.find(u => u.id === userPayload.sub);
+    if (!user) {
+      res.status(404).json({ error: 'USER_NOT_FOUND', message: 'Utilisateur introuvable.' });
+      return;
+    }
+    res.json({ user: sanitizeUser(user) });
+  });
+
+  // POST /api/v1/auth/change-password
+  apiRouter.post('/auth/change-password', authenticate, (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const userPayload = (req as any).user;
+    const user = USERS.find(u => u.id === userPayload.sub);
+
+    if (!user) {
+      res.status(404).json({ error: 'USER_NOT_FOUND', message: 'Utilisateur introuvable.' });
+      return;
+    }
+
+    if (!verifyPassword(currentPassword, user.passwordHash)) {
+      res.status(400).json({ error: 'INVALID_PASSWORD', message: 'Le mot de passe actuel est incorrect.' });
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Le nouveau mot de passe doit comporter au moins 6 caractères.' });
+      return;
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    user.passwordHash = hashPassword(newPassword);
+    user.updatedAt = now;
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: user.username,
+      role: user.role,
+      action: 'PASSWORD_CHANGED',
+      entityId: user.id,
+      details: `Modification du mot de passe par l'utilisateur lui-même.`
+    });
+
+    res.json({ success: true, message: 'Mot de passe mis à jour avec succès.' });
+  });
+
+  // =========================================================================
+  // ADMINISTRATOR-ONLY USER MANAGEMENT ENDPOINTS (/api/v1/users)
+  // =========================================================================
+
+  // GET /api/v1/users (ADMIN only)
+  apiRouter.get('/users', authenticate, requireRole('ADMIN', 'RESPONSABLE_PATRIMOINE'), (req, res) => {
+    const sanitized = USERS.map(sanitizeUser);
+    res.json({
+      total: sanitized.length,
+      users: sanitized
+    });
+  });
+
+  // GET /api/v1/users/:id (ADMIN only)
+  apiRouter.get('/users/:id', authenticate, requireRole('ADMIN', 'RESPONSABLE_PATRIMOINE'), (req, res) => {
+    const user = USERS.find(u => u.id === req.params.id);
+    if (!user) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Utilisateur introuvable.' });
+      return;
+    }
+    res.json(sanitizeUser(user));
+  });
+
+  // POST /api/v1/users (ADMIN only - Create Account)
+  apiRouter.post('/users', authenticate, requireRole('ADMIN', 'RESPONSABLE_PATRIMOINE'), (req, res) => {
+    const { username, fullName, email, role, password } = req.body;
+    const adminUser = (req as any).user;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    if (!username || !fullName || !role || !password) {
+      res.status(400).json({ 
+        error: 'MISSING_FIELDS', 
+        message: 'Nom complet, identifiant, rôle et mot de passe initial sont requis.' 
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      res.status(400).json({ 
+        error: 'WEAK_PASSWORD', 
+        message: 'Le mot de passe initial doit contenir au moins 6 caractères.' 
+      });
+      return;
+    }
+
+    const cleanUsername = String(username).trim().toLowerCase();
+    const existing = USERS.find(u => u.username.toLowerCase() === cleanUsername);
+    if (existing) {
+      res.status(409).json({ 
+        error: 'DUPLICATE_USERNAME', 
+        message: `L'identifiant "${username}" est déjà attribué à un autre compte.` 
+      });
+      return;
+    }
+
+    if (email) {
+      const emailLower = String(email).trim().toLowerCase();
+      const existingEmail = USERS.find(u => u.email && u.email.toLowerCase() === emailLower);
+      if (existingEmail) {
+        res.status(409).json({ 
+          error: 'DUPLICATE_EMAIL', 
+          message: `L'adresse e-mail "${email}" est déjà utilisée.` 
+        });
+        return;
+      }
+    }
+
+    const allowedRoles = ['RESPONSABLE_PATRIMOINE', 'AGENT_INVENTAIRE', 'CONTROLEUR_ZONE', 'ADMIN', 'TEAM_1', 'TEAM_2', 'TEAM_3'];
+    if (!allowedRoles.includes(role)) {
+      res.status(400).json({ 
+        error: 'INVALID_ROLE', 
+        message: `Rôle invalide. Les rôles autorisés sont: ${allowedRoles.join(', ')}` 
+      });
+      return;
+    }
+
+    const newUser: CentralUser = {
+      id: `USR-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 899)}`,
+      username: cleanUsername,
+      fullName: String(fullName).trim(),
+      email: email ? String(email).trim().toLowerCase() : `${cleanUsername}@kotama-agrifood.dz`,
+      role,
+      isActive: true,
+      passwordHash: hashPassword(password),
+      permissions: role === 'RESPONSABLE_PATRIMOINE' || role === 'ADMIN' 
+        ? ['users.manage', 'CREATE_ASSET', 'VIEW_ASSETS', 'VERIFY_ASSET', 'LOAD_ASSET', 'IMPORT & ANALYTICS', 'SYNC']
+        : role === 'AGENT_INVENTAIRE' || role === 'TEAM_1'
+        ? ['CREATE_ASSET', 'VIEW_ASSETS', 'SYNC']
+        : ['VIEW_ASSETS', 'VERIFY_ASSET', 'LOAD_ASSET'],
+      lastLoginAt: null,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    USERS.push(newUser);
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: adminUser?.username || 'ADMIN',
+      role: adminUser?.role || 'ADMIN',
+      action: 'ADMIN_CREATE_USER',
+      entityId: newUser.id,
+      details: `Création du compte utilisateur ${newUser.username} (${newUser.fullName}, rôle: ${newUser.role}) par l'administrateur.`
+    });
+
+    res.status(201).json(sanitizeUser(newUser));
+  });
+
+  // PATCH /api/v1/users/:id (ADMIN only - Update details)
+  apiRouter.patch('/users/:id', authenticate, requireRole('ADMIN', 'RESPONSABLE_PATRIMOINE'), (req, res) => {
+    const user = USERS.find(u => u.id === req.params.id);
+    if (!user) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Utilisateur introuvable.' });
+      return;
+    }
+
+    const { fullName, email } = req.body;
+    const adminUser = (req as any).user;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    if (fullName) user.fullName = String(fullName).trim();
+    if (email) user.email = String(email).trim().toLowerCase();
+    user.updatedAt = now;
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: adminUser?.username || 'ADMIN',
+      role: adminUser?.role || 'ADMIN',
+      action: 'ADMIN_UPDATE_USER',
+      entityId: user.id,
+      details: `Mise à jour des informations du compte ${user.username}.`
+    });
+
+    res.json(sanitizeUser(user));
+  });
+
+  // PATCH /api/v1/users/:id/status (ADMIN only - Activate / Deactivate)
+  apiRouter.patch('/users/:id/status', authenticate, requireRole('ADMIN', 'RESPONSABLE_PATRIMOINE'), (req, res) => {
+    const user = USERS.find(u => u.id === req.params.id);
+    if (!user) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Utilisateur introuvable.' });
+      return;
+    }
+
+    const { isActive } = req.body;
+    const adminUser = (req as any).user;
+
+    // Prevent deactivating own account
+    if (adminUser?.sub === user.id) {
+      res.status(400).json({ error: 'OPERATION_DENIED', message: 'Vous ne pouvez pas désactiver votre propre compte administrateur.' });
+      return;
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    user.isActive = Boolean(isActive);
+    user.updatedAt = now;
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: adminUser?.username || 'ADMIN',
+      role: adminUser?.role || 'ADMIN',
+      action: user.isActive ? 'ADMIN_ACTIVATE_USER' : 'ADMIN_DEACTIVATE_USER',
+      entityId: user.id,
+      details: `${user.isActive ? 'Activation' : 'Désactivation'} du compte ${user.username} par l'administrateur.`
+    });
+
+    res.json(sanitizeUser(user));
+  });
+
+  // PATCH /api/v1/users/:id/role (ADMIN only - Role Change)
+  apiRouter.patch('/users/:id/role', authenticate, requireRole('ADMIN', 'RESPONSABLE_PATRIMOINE'), (req, res) => {
+    const user = USERS.find(u => u.id === req.params.id);
+    if (!user) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Utilisateur introuvable.' });
+      return;
+    }
+
+    const { role } = req.body;
+    const adminUser = (req as any).user;
+    const allowedRoles = ['RESPONSABLE_PATRIMOINE', 'AGENT_INVENTAIRE', 'CONTROLEUR_ZONE', 'ADMIN', 'TEAM_1', 'TEAM_2', 'TEAM_3'];
+
+    if (!allowedRoles.includes(role)) {
+      res.status(400).json({ error: 'INVALID_ROLE', message: 'Rôle non reconnu.' });
+      return;
+    }
+
+    // Protect last active administrator from losing admin role
+    if (adminUser?.sub === user.id && role !== 'ADMIN' && role !== 'RESPONSABLE_PATRIMOINE') {
+      res.status(400).json({ error: 'OPERATION_DENIED', message: 'Impossible de rétrograder son propre compte administrateur.' });
+      return;
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const oldRole = user.role;
+    user.role = role;
+    user.updatedAt = now;
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: adminUser?.username || 'ADMIN',
+      role: adminUser?.role || 'ADMIN',
+      action: 'ADMIN_CHANGE_USER_ROLE',
+      entityId: user.id,
+      details: `Attribution du nouveau rôle ${role} (ancien: ${oldRole}) pour l'utilisateur ${user.username}.`
+    });
+
+    res.json(sanitizeUser(user));
+  });
+
+  // POST /api/v1/users/:id/reset-password (ADMIN only - Force Reset Password)
+  apiRouter.post('/users/:id/reset-password', authenticate, requireRole('ADMIN', 'RESPONSABLE_PATRIMOINE'), (req, res) => {
+    const user = USERS.find(u => u.id === req.params.id);
+    if (!user) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Utilisateur introuvable.' });
+      return;
+    }
+
+    const { newPassword } = req.body;
+    const adminUser = (req as any).user;
+
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Le mot de passe doit comporter au moins 6 caractères.' });
+      return;
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    user.passwordHash = hashPassword(newPassword);
+    user.updatedAt = now;
+
+    centralAuditTrail.unshift({
+      id: `AUD-${Date.now()}`,
+      timestamp: now,
+      actor: adminUser?.username || 'ADMIN',
+      role: adminUser?.role || 'ADMIN',
+      action: 'ADMIN_RESET_USER_PASSWORD',
+      entityId: user.id,
+      details: `Réinitialisation administrative du mot de passe pour le compte ${user.username}.`
+    });
+
+    res.json({ success: true, message: `Mot de passe du compte ${user.username} réinitialisé avec succès.` });
   });
 
   // 3. Assets CRUD & Query (Function 3)

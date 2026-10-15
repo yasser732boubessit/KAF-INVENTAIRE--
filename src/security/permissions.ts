@@ -78,6 +78,7 @@ export interface UserSession {
   token: string;
   authenticatedAt: string;
   permissions: AppPermission[];
+  isOffline?: boolean;
 }
 
 /**
