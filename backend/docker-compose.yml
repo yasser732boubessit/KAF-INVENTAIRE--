@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kaf_postgres_16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kaf_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kaf_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-kaf_inventaire}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kaf_admin} -d ${POSTGRES_DB:-kaf_inventaire}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kaf_redis_7
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kaf_backend_nestjs
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-5000}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-kaf_admin}:${POSTGRES_PASSWORD:-kaf_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-kaf_inventaire}?schema=public"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-kaf_inventaire_secure_jwt_secret_change_in_prod}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-8h}
+      DEVICE_REGISTRATION_TOKEN: ${DEVICE_REGISTRATION_TOKEN:-kaf_dev_reg_token_9841}
+    ports:
+      - "${PORT:-5000}:${PORT:-5000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
