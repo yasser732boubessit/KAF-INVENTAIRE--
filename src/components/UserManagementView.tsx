@@ -23,7 +23,7 @@ import {
   Shield
 } from 'lucide-react';
 import { Language, UserRole } from '../types';
-import { AppUser, AppPermission, ROLE_PERMISSIONS, ROLE_METADATA } from '../security/permissions';
+import { AppUser, AppPermission, ROLE_PERMISSIONS, ROLE_METADATA, getRoleMetadata, getRolePermissions, normalizeRole } from '../security/permissions';
 import { CryptoSecurity } from '../security/crypto';
 import { authService } from '../security/authService';
 import { dbService } from '../services/databaseService';
@@ -138,7 +138,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
   // Filtered users
   const filteredUsers = users.filter(user => {
-    if (roleFilter !== 'ALL' && user.role !== roleFilter) return false;
+    if (roleFilter !== 'ALL' && user.role !== roleFilter && normalizeRole(user.role) !== roleFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       return (
@@ -555,7 +555,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </div>
               ) : (
                 filteredUsers.map(user => {
-                  const meta = ROLE_METADATA[user.role];
+                  const meta = getRoleMetadata(user.role);
                   const isSelected = selectedUser?.id === user.id;
 
                   return (
@@ -688,54 +688,65 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </div>
 
               {/* User Bio Card */}
-              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg space-y-3">
-                <div className="flex items-center gap-3">
-                  <UserRoleIcon role={selectedUser.role} size="lg" variant="avatar" lang={lang} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-bold text-xs text-slate-900 truncate">
-                        {selectedUser.fullName}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 ${ROLE_METADATA[selectedUser.role].badgeColor}`}>
-                        {ROLE_METADATA[selectedUser.role].labelFr}
-                      </span>
+              {(() => {
+                const selectedMeta = getRoleMetadata(selectedUser.role);
+                const rolePerms = getRolePermissions(selectedUser.role);
+                return (
+                  <>
+                    <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg space-y-3">
+                      <div className="flex items-center gap-3">
+                        <UserRoleIcon role={selectedUser.role} size="lg" variant="avatar" lang={lang} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-xs text-slate-900 truncate">
+                              {selectedUser.fullName}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 ${selectedMeta.badgeColor}`}>
+                              {selectedMeta.labelFr}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-mono text-slate-500 block">
+                            @{selectedUser.username} &bull; {selectedUser.email}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 leading-relaxed border-t border-slate-200/80 pt-2">
+                        {selectedMeta.descriptionFr}
+                      </p>
+
+                      <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-slate-500 pt-2 border-t border-slate-200">
+                        <div>
+                          <span className="text-slate-400 block font-sans">Mot de passe:</span>
+                          <span className="font-bold text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 inline-block mt-0.5">
+                            {selectedUser.passwordHash ? (selectedUser.passwordHash.length > 25 ? 'admin123 (par défaut)' : selectedUser.passwordHash) : 'admin123'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block font-sans">Dernière connexion:</span>
+                          <span className="inline-block mt-0.5">{selectedUser.lastLoginAt || 'Jamais'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block font-sans">Créé le:</span>
+                          <span className="inline-block mt-0.5">{selectedUser.createdAt ? selectedUser.createdAt.substring(0, 10) : '2026-01-01'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <span className="text-[11px] font-mono text-slate-500 block">
-                      @{selectedUser.username} &bull; {selectedUser.email}
-                    </span>
-                  </div>
-                </div>
 
-                <p className="text-[11px] text-slate-600 leading-relaxed border-t border-slate-200/80 pt-2">
-                  {ROLE_METADATA[selectedUser.role].descriptionFr}
-                </p>
+                    {/* Permissions List for this User's Role */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <FileKey className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Matrice des Droits Accordés ({rolePerms.length})</span>
+                        </h3>
+                        <span className="text-[10px] text-emerald-700 font-mono font-bold">
+                          ✓ 100% Appliqués
+                        </span>
+                      </div>
 
-                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-500 pt-2 border-t border-slate-200">
-                  <div>
-                    <span className="text-slate-400 block font-sans">Dernière connexion:</span>
-                    <span>{selectedUser.lastLoginAt || 'Jamais'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block font-sans">Créé le:</span>
-                    <span>{selectedUser.createdAt.substring(0, 10)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Permissions List for this User's Role */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                    <FileKey className="w-3.5 h-3.5 text-purple-700" />
-                    <span>Matrice des Droits Accordés ({ROLE_PERMISSIONS[selectedUser.role].length})</span>
-                  </h3>
-                  <span className="text-[10px] text-emerald-700 font-mono font-bold">
-                    ✓ 100% Appliqués
-                  </span>
-                </div>
-
-                <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1 border border-slate-200 rounded p-2.5 bg-slate-50/50">
-                  {ROLE_PERMISSIONS[selectedUser.role].map((perm: AppPermission) => (
+                      <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1 border border-slate-200 rounded p-2.5 bg-slate-50/50">
+                        {rolePerms.map((perm: AppPermission) => (
                     <div 
                       key={perm}
                       className="flex items-center justify-between p-1.5 bg-white rounded border border-slate-200 text-[11px]"
@@ -758,6 +769,9 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               <div className="p-3 bg-purple-50/80 border border-purple-200 rounded text-[11px] text-purple-900 leading-relaxed">
                 <strong>Garantie Sécurité KAF-INVENTAIRE :</strong> Aucune élévation de privilège locale n'est possible. Même en cas de tentative d'appel IPC direct par un agent d'ajout vers des fonctions de clôture de campagne ou d'administration, le backend bloque l'opération et journalise la tentative dans le registre d'audit.
               </div>
+                  </>
+                );
+              })()}
             </div>
           ) : (
             <div className="bg-white border border-slate-200 rounded-lg p-8 text-center text-slate-400 text-xs">

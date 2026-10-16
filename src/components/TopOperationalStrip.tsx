@@ -18,7 +18,8 @@ import {
   Image as ImageIcon,
   Server,
   LogOut,
-  UserCheck
+  UserCheck,
+  BadgeCheck
 } from 'lucide-react';
 import { ActiveScreen, Language, UserRole } from '../types';
 import { translations } from '../translations';
@@ -159,6 +160,22 @@ export const TopOperationalStrip: React.FC<TopOperationalStripProps> = ({
             <Server className="w-3 h-3 text-emerald-400" />
             <span className="text-[10px] font-mono">
               BACKEND SYNC (PG16)
+            </span>
+          </button>
+
+          {/* Produits Vérifiés in situ (BadgeCheck) */}
+          <button
+            onClick={() => setActiveScreen('produits_verifies')}
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded border transition-colors ${
+              activeScreen === 'produits_verifies'
+                ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/50'
+                : 'bg-neutral-900 border-neutral-800 hover:border-emerald-600 text-neutral-300 hover:text-white'
+            }`}
+            title={lang === 'ar' ? 'عرض الأجهزة والمعدات المتحقق منها (Alt+V)' : 'Consulter les PC et équipements vérifiés in situ (Alt+V)'}
+          >
+            <BadgeCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-[10px] font-mono font-bold tracking-wide">
+              {lang === 'ar' ? 'المعدات المؤكدة' : 'PRODUITS VÉRIFIÉS'}
             </span>
           </button>
 

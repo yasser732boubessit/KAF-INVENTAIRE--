@@ -217,7 +217,7 @@ export class LocalSQLiteEngine {
             role: 'RESPONSABLE_PATRIMOINE',
             isActive: 1,
             avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
-            passwordHash: 'e6c279f6271ed4936e3b315f4b869f329316a49d5ecd25275ea473634099e097', // admin123
+            passwordHash: 'admin123',
             createdAt: '2026-01-01 08:00:00',
             updatedAt: '2026-10-12 08:30:00',
             lastLoginAt: '2026-10-12 08:30:00'
@@ -230,7 +230,7 @@ export class LocalSQLiteEngine {
             role: 'AGENT_INVENTAIRE',
             isActive: 1,
             avatarUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=150&q=80',
-            passwordHash: '35d72ef7daae93d567ad00cb016788556f8f553efef24f8d95fe76a742cb5294', // agent123
+            passwordHash: 'agent123',
             createdAt: '2026-01-15 08:00:00',
             updatedAt: '2026-10-12 07:45:00',
             lastLoginAt: '2026-10-12 07:45:00'
@@ -243,7 +243,7 @@ export class LocalSQLiteEngine {
             role: 'CONTROLEUR_ZONE',
             isActive: 1,
             avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-            passwordHash: '8b6d8591ef1fc5773199c0d3557e5e3e2a77a45fc9e779a51980ee90efecbcf0', // ctrl123
+            passwordHash: 'ctrl123',
             createdAt: '2026-02-01 08:00:00',
             updatedAt: '2026-10-12 08:15:00',
             lastLoginAt: '2026-10-12 08:15:00'

@@ -42,6 +42,7 @@ import { AuditReportManifest } from './components/AuditReportManifest';
 import { DesktopDatabaseCenter } from './components/DesktopDatabaseCenter';
 import { UserManagementView } from './components/UserManagementView';
 import { BackendSyncCenterView } from './components/BackendSyncCenterView';
+import { VerifiedAssetsView } from './components/VerifiedAssetsView';
 import { NewAssetModal } from './components/NewAssetModal';
 import { LoginScreen } from './components/LoginScreen';
 import { sound } from './utils/audio';
@@ -58,11 +59,18 @@ export default function App() {
   const [userRole, setUserRole] = useState<UserRole>(() => authService.getSession()?.user?.role || 'RESPONSABLE_PATRIMOINE');
   const [currentScanningBay, setCurrentScanningBay] = useState<string>('BAY-04');
 
-  // 1. Persistent Assets Store
+  // 1. Persistent Assets Store (50 enterprise assets)
   const [assets, setAssets] = useState<Asset[]>(() => {
     try {
-      const saved = localStorage.getItem('kaf_assets_v3');
-      return saved ? JSON.parse(saved) : initialAssets;
+      const saved = localStorage.getItem('kaf_assets_v4');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= initialAssets.length) {
+          return parsed;
+        }
+      }
+      // If previous version had fewer items, upgrade to initialAssets benchmark (50 items)
+      return initialAssets;
     } catch {
       return initialAssets;
     }
@@ -183,6 +191,8 @@ export default function App() {
           '0': 'desktop',
           'u': 'users',
           'U': 'users',
+          'v': 'produits_verifies',
+          'V': 'produits_verifies',
           's': 'sync_center',
           'S': 'sync_center'
         };
@@ -229,6 +239,7 @@ export default function App() {
   // Persist state to localStorage & dbService for offline reliability
   useEffect(() => {
     try {
+      localStorage.setItem('kaf_assets_v4', JSON.stringify(assets));
       localStorage.setItem('kaf_assets_v3', JSON.stringify(assets));
     } catch {}
   }, [assets]);
@@ -946,6 +957,20 @@ export default function App() {
                 setActiveScreen('decouvertes');
               }}
               lang={lang}
+            />
+          )}
+
+          {/* Screen: Produits vérifiés & Équipements confirmés in situ */}
+          {activeScreen === 'produits_verifies' && (
+            <VerifiedAssetsView
+              assets={assets}
+              onSelectAsset={(asset) => {
+                setSelectedAsset(asset);
+                setActiveScreen('cockpit');
+              }}
+              onUpdateInventoryStatus={handleUpdateInventoryStatus}
+              lang={lang}
+              userRole={userRole}
             />
           )}
 

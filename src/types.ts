@@ -7,7 +7,24 @@ export type InventoryResultStatus =
 
 export type AssetCondition = 'nominal' | 'minor_wear' | 'needs_repair' | 'damaged' | 'uninspected';
 
-export type AssetCategory = 'Mechanical' | 'Electrical' | 'Automation' | 'Instrumentation' | 'Safety';
+export type AssetCategory = 
+  | 'Mechanical' 
+  | 'Electrical' 
+  | 'Automation' 
+  | 'Instrumentation' 
+  | 'Safety'
+  | 'IT_Hardware'
+  | 'Office_PC';
+
+export type EquipmentType = 
+  | 'PC_PORTABLE' 
+  | 'PC_BUREAU' 
+  | 'ECRAN' 
+  | 'SERVEUR' 
+  | 'IMPRIMANTE' 
+  | 'AUTOMATE' 
+  | 'EQUIPEMENT_INDUSTRIEL' 
+  | 'AUTRE';
 
 export type UserRole = 'AGENT_INVENTAIRE' | 'CONTROLEUR_ZONE' | 'RESPONSABLE_PATRIMOINE';
 
@@ -37,6 +54,17 @@ export interface Asset {
   imageUrl: string;
   weightKg: number;
   calibrationDueDate: string;
+  
+  // Detailed location tracking (Site, Bâtiment, Étage, Bureau/Zone)
+  site?: string;
+  building?: string;
+  floor?: string;
+  roomOrOffice?: string;
+  exactPosition?: string;
+  equipmentType?: EquipmentType;
+  brand?: string;
+  model?: string;
+
   // Conflict demo fields
   serverStatus?: InventoryResultStatus;
   serverLocation?: string;
@@ -131,6 +159,7 @@ export interface ValidationChecklistItem {
 export type ActiveScreen = 
   | 'cockpit' 
   | 'scanner' 
+  | 'produits_verifies'
   | 'decouvertes' 
   | 'campagnes' 
   | 'warehouse_map' 

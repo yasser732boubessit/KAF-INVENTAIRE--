@@ -18,7 +18,8 @@ import {
   Volume2,
   VolumeX,
   Users,
-  Server
+  Server,
+  BadgeCheck
 } from 'lucide-react';
 import { ActiveScreen, Language, UserRole } from '../types';
 import { translations } from '../translations';
@@ -99,6 +100,12 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       label: t.screenScanner, 
       icon: <ScanLine className="w-4 h-4 shrink-0" />, 
       shortcut: 'Alt+2' 
+    },
+    { 
+      id: 'produits_verifies', 
+      label: t.screenVerifiedAssets || "Produits vérifiés", 
+      icon: <BadgeCheck className="w-4 h-4 shrink-0 text-emerald-400" />, 
+      shortcut: 'Alt+V' 
     },
     { 
       id: 'decouvertes', 

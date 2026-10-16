@@ -25,6 +25,7 @@ export const translations = {
     screenDesktop: "Gestion Desktop & SQLite",
     screenUsers: "Utilisateurs & Permissions",
     screenSyncCenter: "Moteur de Synchro & Test Backend",
+    screenVerifiedAssets: "Produits vérifiés",
 
     // Desktop & SQLite Hub
     desktopTitle: "Centre de Contrôle Desktop Windows & Base SQLite",
@@ -313,6 +314,7 @@ export const translations = {
     screenDesktop: "تطبيق سطح المكتب وقاعدة SQLite",
     screenUsers: "المستخدمون والصلاحيات والأدوار",
     screenSyncCenter: "مركز المزامنة واختبار الباك إند",
+    screenVerifiedAssets: "الأجهزة والمعدات المتحقق منها",
 
     // Desktop & SQLite Hub
     desktopTitle: "مركز تحكم تطبيق سطح المكتب Windows وقاعدة بيانات SQLite",
