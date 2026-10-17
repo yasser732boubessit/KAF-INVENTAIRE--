@@ -39,7 +39,12 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
     importBackup: (backup) => import_electron.ipcRenderer.invoke("db:importBackup", backup),
     resetSeed: () => import_electron.ipcRenderer.invoke("db:resetSeed"),
     runIntegrityCheck: () => import_electron.ipcRenderer.invoke("db:runIntegrityCheck"),
-    exportSqlDump: () => import_electron.ipcRenderer.invoke("db:exportSqlDump")
+    exportSqlDump: () => import_electron.ipcRenderer.invoke("db:exportSqlDump"),
+    getUsers: () => import_electron.ipcRenderer.invoke("db:getUsers"),
+    createUser: (user) => import_electron.ipcRenderer.invoke("db:createUser", user),
+    updateUser: (id, fields) => import_electron.ipcRenderer.invoke("db:updateUser", id, fields),
+    setUserActiveStatus: (id, isActive) => import_electron.ipcRenderer.invoke("db:setUserActiveStatus", id, isActive),
+    resetUserPassword: (id, newPasswordHash) => import_electron.ipcRenderer.invoke("db:resetUserPassword", id, newPasswordHash)
   },
   system: {
     getAppInfo: () => import_electron.ipcRenderer.invoke("system:getAppInfo"),
