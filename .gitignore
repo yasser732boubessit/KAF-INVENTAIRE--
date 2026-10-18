@@ -1,8 +1,12 @@
-node_modules/
+﻿node_modules/
 build/
 dist/
+dist-electron/
+frontend/dist-electron/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+*.backup
+package.json.backup

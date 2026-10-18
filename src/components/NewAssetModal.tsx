@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { X, Plus, Tag } from 'lucide-react';
-import { Asset, AssetCategory, Language } from '../types';
+import React, { useState, useEffect } from 'react';
+import { X, Plus, Tag, ShieldCheck, Loader2 } from 'lucide-react';
+import { Asset, AssetCategory, Language, InventoryZone } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
+import { dbService } from '../services/databaseService';
+import { normalizeGarbledScanString, translateHardwareEventToChar } from '../utils/keyboardScannerEngine';
 
 interface NewAssetModalProps {
   isOpen: boolean;
@@ -19,19 +21,86 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
 }) => {
   const t = translations[lang];
 
+  // ═══════════════════════════════════════════════════════════
+  // ÉTATS
+  // ═══════════════════════════════════════════════════════════
   const [nameFr, setNameFr] = useState('');
   const [name, setName] = useState('');
   const [nameAr, setNameAr] = useState('');
   const [category, setCategory] = useState<AssetCategory>('Mechanical');
-  const [bayLocation, setBayLocation] = useState('BAY-01-RACK-01-L1');
   const [serialNumber, setSerialNumber] = useState(`SN-${Math.floor(100000 + Math.random() * 900000)}-FR`);
   const [barcode, setBarcode] = useState(`${Math.floor(890000000000 + Math.random() * 999999999)}`);
   const [weightKg, setWeightKg] = useState('12.5');
 
+  // ═══════════════════════════════════════════════════════════
+  // NOUVEAU : Zones disponibles (ouvertes seulement)
+  // ═══════════════════════════════════════════════════════════
+  const [availableZones, setAvailableZones] = useState<InventoryZone[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>('');
+  const [bayLocation, setBayLocation] = useState('');
+  const [loadingZones, setLoadingZones] = useState(false);
+
+  // ═══════════════════════════════════════════════════════════
+  // NOUVEAU : Charger les zones OUVERTES au montage
+  // ═══════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const loadOpenZones = async () => {
+      setLoadingZones(true);
+      try {
+        const campaign = await dbService.getCampaign();
+        
+        // ✅ FILTRE : Seulement les zones OUVERTES (isClosed === false)
+        const openZones = (campaign?.zones || []).filter(z => !z.isClosed);
+        
+        console.log('[NewAssetModal] Zones totales:', campaign?.zones?.length || 0);
+        console.log('[NewAssetModal] Zones ouvertes:', openZones.length);
+        
+        setAvailableZones(openZones);
+        
+        // Sélectionner la première zone par défaut
+        if (openZones.length > 0 && !selectedZoneId) {
+          setSelectedZoneId(openZones[0].id);
+          setBayLocation(`${openZones[0].id}-RACK-01-L1`);
+        } else if (openZones.length === 0) {
+          console.warn('[NewAssetModal] ⚠️ Aucune zone ouverte disponible');
+        }
+      } catch (err) {
+        console.error('[NewAssetModal] Erreur chargement zones:', err);
+      } finally {
+        setLoadingZones(false);
+      }
+    };
+
+    loadOpenZones();
+  }, [isOpen]);
+
+  // ═══════════════════════════════════════════════════════════
+  // NOUVEAU : Quand l'utilisateur change de zone
+  // ═══════════════════════════════════════════════════════════
+  const handleZoneChange = (zoneId: string) => {
+    setSelectedZoneId(zoneId);
+    setBayLocation(`${zoneId}-RACK-01-L1`);
+  };
+
   if (!isOpen) return null;
 
+  // ═══════════════════════════════════════════════════════════
+  // SOUMISSION
+  // ═══════════════════════════════════════════════════════════
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (availableZones.length === 0) {
+      alert(
+        lang === 'fr'
+          ? 'Aucune zone ouverte disponible. Veuillez ouvrir une zone dans la gestion de campagne.'
+          : 'لا توجد مناطق مفتوحة متاحة. يرجى فتح منطقة في إدارة الحملة.'
+      );
+      return;
+    }
+
     const newId = `AST-${Math.floor(10502 + Math.random() * 8999)}`;
     const effectiveFr = nameFr.trim() || 'Nouvel Ensemble Industriel';
     const effectiveEn = name.trim() || 'New Industrial Assembly';
@@ -58,8 +127,8 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
       serialVerified: true,
       lastScannedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
       scannedBy: 'TECH-941',
-      notes: lang === 'fr' 
-        ? "Enregistré et audité manuellement in situ lors de la tournée." 
+      notes: lang === 'fr'
+        ? "Enregistré et audité manuellement in situ lors de la tournée."
         : "Manually commissioned and registered during audit sweep.",
       notesFr: "Enregistré et audité manuellement in situ lors de la tournée.",
       imageUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
@@ -88,6 +157,7 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-3.5 text-xs">
+          {/* Désignation FR */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               {lang === 'fr' ? 'Désignation en Français' : lang === 'ar' ? 'اسم وتوصيف المعدة (بالفرنسية)' : 'Equipment Name (French)'}
@@ -102,6 +172,7 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
             />
           </div>
 
+          {/* Désignation EN */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               {lang === 'fr' ? 'Désignation Technique (Anglais)' : lang === 'ar' ? 'الاسم التقني (بالإنجليزية)' : 'Technical Name (English)'}
@@ -115,6 +186,7 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
             />
           </div>
 
+          {/* Catégorie + Zone */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">{t.modalCategory}</label>
@@ -131,18 +203,59 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
               </select>
             </div>
 
+            {/* ✅ NOUVEAU : Select des zones ouvertes */}
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">{t.modalBay || (lang === 'fr' ? 'Emplacement Baie' : 'موقع الرف')}</label>
-              <input
-                type="text"
-                value={bayLocation}
-                onChange={(e) => setBayLocation(e.target.value)}
-                placeholder="BAY-01-RACK-01-L1"
-                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-[#0284C7] focus:outline-none font-mono-numbers"
-              />
+              <label className="block font-semibold text-slate-700 mb-1">
+                {lang === 'fr' ? 'Zone (Baie)' : 'المنطقة (الرف)'}
+                {loadingZones && <Loader2 className="w-3 h-3 inline ml-1 animate-spin" />}
+              </label>
+              <select
+                value={selectedZoneId}
+                onChange={(e) => handleZoneChange(e.target.value)}
+                disabled={loadingZones || availableZones.length === 0}
+                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-[#0284C7] focus:outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed font-mono-numbers"
+              >
+                {availableZones.length === 0 ? (
+                  <option value="">
+                    {loadingZones
+                      ? 'Chargement...'
+                      : (lang === 'fr' ? '⚠️ Aucune zone ouverte' : '⚠️ لا توجد منطقة مفتوحة')}
+                  </option>
+                ) : (
+                  availableZones.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.id} — {zone.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              
+              {/* Info sur les zones fermées */}
+              {availableZones.length === 0 && !loadingZones && (
+                <p className="text-[10px] text-amber-600 mt-1">
+                  {lang === 'fr'
+                    ? 'Toutes les zones sont fermées. Ouvrez-en une dans "Campagnes & Clôtures".'
+                    : 'جميع المناطق مغلقة. افتح منطقة في "الحملات والإغلاق".'}
+                </p>
+              )}
             </div>
           </div>
 
+          {/* Emplacement précis */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              {lang === 'fr' ? 'Emplacement précis (Rack / Niveau)' : 'الموقع الدقيق (رف / مستوى)'}
+            </label>
+            <input
+              type="text"
+              value={bayLocation}
+              onChange={(e) => setBayLocation(e.target.value)}
+              placeholder="BAY-01-RACK-01-L1"
+              className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-[#0284C7] focus:outline-none font-mono-numbers"
+            />
+          </div>
+
+          {/* Série + Barcode avec immunisation clavier */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">{t.modalSerial}</label>
@@ -154,16 +267,38 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">{t.modalBarcode}</label>
+              <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                {t.modalBarcode}
+              </label>
               <input
                 type="text"
                 value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-[#0284C7] focus:outline-none font-mono-numbers text-slate-800"
+                onChange={(e) => {
+                  // ✅ Immunisation AZERTY/AR
+                  const { normalized } = normalizeGarbledScanString(e.target.value);
+                  setBarcode(normalized);
+                }}
+                onKeyDown={(e) => {
+                  // ✅ Immunisation hardware (codes physiques)
+                  if (e.ctrlKey || e.altKey || e.metaKey) return;
+                  const char = translateHardwareEventToChar(e);
+                  if (char && char !== '\n' && char !== '\t' && char !== 'Backspace') {
+                    e.preventDefault();
+                    setBarcode(prev => prev + char);
+                  }
+                }}
+                className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono-numbers text-slate-800"
+                placeholder="Scannez ou saisissez"
               />
+              <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                <ShieldCheck className="w-2.5 h-2.5" />
+                {lang === 'fr' ? 'Clavier Immunisé (AZERTY / AR / EN)' : 'مناعة كاملة للغة الكيبورد'}
+              </p>
             </div>
           </div>
 
+          {/* Actions */}
           <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
             <button
               type="button"
@@ -174,7 +309,8 @@ export const NewAssetModal: React.FC<NewAssetModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-4 py-1.5 bg-[#0284C7] hover:bg-[#0369a1] text-white rounded font-medium shadow-sm flex items-center gap-1.5"
+              disabled={availableZones.length === 0}
+              className="px-4 py-1.5 bg-[#0284C7] hover:bg-[#0369a1] text-white rounded font-medium shadow-sm flex items-center gap-1.5 disabled:bg-slate-400 disabled:cursor-not-allowed"
             >
               <Tag className="w-3.5 h-3.5" />
               <span>{t.modalSubmit}</span>

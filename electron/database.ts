@@ -1,6 +1,9 @@
 /**
  * KAF-INVENTAIRE - Local SQLite Engine for Electron Windows
  * Compliant with offline-first industrial asset management specifications.
+ *
+ * ✅ NEW: syncUsers() — sync users from NestJS server to local SQLite
+ * ✅ FIXED: createUser() now uses INSERT OR REPLACE to prevent UNIQUE constraint errors
  */
 
 import path from 'node:path';
@@ -12,7 +15,7 @@ export interface SQLiteInitOptions {
 
 export class LocalSQLiteEngine {
   private dbPath: string;
-  private db: any = null; // SQLite database instance (better-sqlite3 or sqlite3)
+  private db: any = null; // better-sqlite3 instance
   private isLoaded = false;
 
   constructor(options: SQLiteInitOptions) {
@@ -31,7 +34,6 @@ export class LocalSQLiteEngine {
     if (this.isLoaded) return;
 
     try {
-      // Dynamic import to support both better-sqlite3 and sqlite3 gracefully in Node/Electron
       let DatabaseConstructor: any;
       try {
         DatabaseConstructor = (await import('better-sqlite3')).default;
@@ -40,7 +42,6 @@ export class LocalSQLiteEngine {
         this.db.pragma('foreign_keys = ON');
         this.db.pragma('synchronous = NORMAL');
       } catch (e) {
-        // Fallback or mock driver if native binary not yet compiled for local dev
         console.warn('Native SQLite driver load note:', e);
       }
 
@@ -204,7 +205,9 @@ export class LocalSQLiteEngine {
 
     this.db.exec(schema);
 
-    // Seed default administrative and operational users if table is empty
+    // ═══════════════════════════════════════════════════════════
+    // SEED USERS (only if empty)
+    // ═══════════════════════════════════════════════════════════
     try {
       const userCount = this.db.prepare('SELECT COUNT(*) as count FROM users').get().count;
       if (userCount === 0) {
@@ -250,41 +253,42 @@ export class LocalSQLiteEngine {
           }
         ];
 
+        // ✅ التعديل هنا: استخدام INSERT OR REPLACE لتفادي أخطاء التكرار
         const insert = this.db.prepare(`
-          INSERT INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
+          INSERT OR REPLACE INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
           VALUES (@id, @username, @fullName, @email, @role, @isActive, @avatarUrl, @passwordHash, @lastLoginAt, @createdAt, @updatedAt)
         `);
 
         for (const u of seedUsers) {
           insert.run(u);
         }
+        console.log('[SQLite] Seeded', seedUsers.length, 'users');
       }
     } catch (e) {
       console.warn('Users table seed note:', e);
     }
 
-    // Seed default assets, campaign, zones, discoveries, mutations, conflicts, and checklist if assets empty
+    // ═══════════════════════════════════════════════════════════
+    // SEED ASSETS (only if empty)
+    // ═══════════════════════════════════════════════════════════
     try {
       const assetCount = this.db.prepare('SELECT COUNT(*) as count FROM assets').get().count;
       if (assetCount === 0) {
-        // Seed default campaign
         this.db.prepare(`
           INSERT OR REPLACE INTO campaigns (id, title, status, startDate, endDate, leadAuditor, zonesJson, progressPercent)
           VALUES ('CAMP-2026-Q1', 'Campagne Générale d''Inventaire Industriel Q1-2026', 'EN_COURS', '2026-10-01', '2026-10-15', 'Yasser B. (Auditeur Principal)', '', 75)
         `).run();
 
-        // Seed default zones
         const insertZone = this.db.prepare('INSERT OR REPLACE INTO zones (id, name, aisle, isClosed, closedAt, closedBy) VALUES (?, ?, ?, ?, ?, ?)');
         insertZone.run('BAY-01', 'Baie 01 - Allée A1', 'Aisle A1', 0, null, null);
         insertZone.run('BAY-02', 'Baie 02 - Allée A2', 'Aisle A2', 1, '2026-10-08 07:50:00', 'MGR-CTRL-09');
         insertZone.run('BAY-03', 'Baie 03 - Allée A3', 'Aisle A3', 0, null, null);
         insertZone.run('BAY-04', 'Baie 04 - Allée A4', 'Aisle A4', 0, null, null);
 
-        // Seed initial assets
         const initialAssetList = [
           {
             id: "AST-10492", officialCode: "IMMO-2026-00492", name: "High-Pressure Hydraulic Gear Pump H2",
-            nameAr: "مضخة هيدروليكية تروسية عالية الضغط H2", nameFr: "Pompe hydraulique à engrenages haute pression H2",
+            nameAr: "مضخة هيدروليكية ترسية عالية الضغط H2", nameFr: "Pompe hydraulique à engrenages haute pression H2",
             sku: "SKU-HYD-092", serialNumber: "SN-940218-GB", barcode: "894102938102", rfidTag: "E280-1160-2000-0914",
             category: "Mechanical", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-02-L3", scannedBayLocation: "BAY-04-RACK-02-L3",
             inventoryStatus: "CONFORME", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
@@ -297,7 +301,7 @@ export class LocalSQLiteEngine {
             sku: "SKU-AUT-150", serialNumber: "SN-772910-DE", barcode: "894102938103", rfidTag: "E280-1160-2000-0915",
             category: "Automation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-01-L2", scannedBayLocation: "BAY-04-RACK-01-L2",
             inventoryStatus: "CONFORME", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
-            lastScannedAt: "2026-10-08 07:22:05", scannedBy: "TECH-941", notes: "Firmware v3.1 validé, batterie de sauvegarde nominale.",
+            lastScannedAt: "2026-10-08 07:22:05", scannedBy: "TECH-941", notes: "Firmware v3.1 validé.",
             imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", weightKg: 3.2, calibrationDueDate: "2027-01-20"
           },
           {
@@ -306,7 +310,7 @@ export class LocalSQLiteEngine {
             sku: "SKU-ELE-412", serialNumber: "SN-318492-AT", barcode: "894102938104", rfidTag: "E280-1160-2000-0916",
             category: "Electrical", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-02-RACK-01-L1", scannedBayLocation: "BAY-03-RACK-04-L1",
             inventoryStatus: "ECART_LOCALISATION", condition: "minor_wear", tamperSealIntact: 0, rfidVerified: 1, serialVerified: 1,
-            lastScannedAt: "2026-10-08 07:31:40", scannedBy: "TECH-941", notes: "Trouvé en Baie 03 au lieu de la Baie 02 théorique.",
+            lastScannedAt: "2026-10-08 07:31:40", scannedBy: "TECH-941", notes: "Trouvé en Baie 03 au lieu de la Baie 02.",
             imageUrl: "https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?auto=format&fit=crop&w=600&q=80", weightKg: 142.0, calibrationDueDate: "2026-11-30"
           },
           {
@@ -320,11 +324,11 @@ export class LocalSQLiteEngine {
           },
           {
             id: "AST-10502", officialCode: "IMMO-2026-00502", name: "Lenovo ThinkVision C24-20 Industrial Workstation Monitor",
-            nameAr: "شاشة محطة التحكم والمراقبة الصناعية Lenovo C24-20", nameFr: "Moniteur de poste de supervision Lenovo C24-20 (Type A20238FD0)",
+            nameAr: "شاشة محطة التحكم والمراقبة الصناعية Lenovo C24-20", nameFr: "Moniteur de poste de supervision Lenovo C24-20",
             sku: "SKU-IT-C2420", serialNumber: "V5HND516", barcode: "1S62A8KAT1EUV5HND516", rfidTag: "E280-1160-2000-0924",
             category: "Automation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-02-L1", scannedBayLocation: null,
             inventoryStatus: "NON_VERIFIE", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
-            lastScannedAt: null, scannedBy: null, notes: "Moniteur LCD 23.8 pouces FHD. MTM: 62A8-KAR1-WW.",
+            lastScannedAt: null, scannedBy: null, notes: "Moniteur LCD 23.8 pouces FHD.",
             imageUrl: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80", weightKg: 3.01, calibrationDueDate: "2027-12-31"
           }
         ];
@@ -347,7 +351,6 @@ export class LocalSQLiteEngine {
           insertAsset.run(a);
         }
 
-        // Seed initial discoveries
         const insertDisc = this.db.prepare(`
           INSERT OR REPLACE INTO discoveries (id, temporaryTag, description, serialNumber, barcode, foundLocation, foundBy, foundAt, imageUrl, status, matchedAssetId)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -359,52 +362,27 @@ export class LocalSQLiteEngine {
           "EN_ATTENTE_REVUE", null
         );
 
-        // Seed initial audit log
-        this.addAuditLog({
-          id: 'LOG-INIT-01',
-          timestamp: '2026-10-08 07:14:22',
-          userId: 'SYSTEM',
-          userRole: 'RESPONSABLE_PATRIMOINE',
-          action: 'INITIALISATION_SQLITE',
-          entityId: 'SYSTEM',
-          oldValue: 'NULL',
-          newValue: 'WAL_ACTIVE',
-          reason: 'Initialisation de la base SQLite locale KAF-INVENTAIRE'
-        });
-
-        // Seed initial checklist
         const insertChk = this.db.prepare('INSERT OR REPLACE INTO checklist (id, title, titleAr, description, status) VALUES (?, ?, ?, ?, ?)');
-        insertChk.run(1, "Scan d'un actif conforme", "مسح أصل مطابق في مكانه", "Vérifie l'identification d'un équipement présent à sa place théorique.", "PASSED");
-        insertChk.run(2, "Détection d'un écart d'emplacement", "اكتشاف أصل في مكان غير مكانه", "Signale un actif trouvé dans une baie différente de celle prévue.", "PASSED");
-        insertChk.run(3, "Clôture de zone et calcul des manquants", "إغلاق المنطقة وحساب المفقودات", "Vérifie le déclenchement des manquants seulement après clôture formelle.", "PASSED");
-        insertChk.run(4, "Consignation d'une découverte in situ", "تسجيل أصل مكتشف غير مدرج", "Vérifie l'attribution d'un tag temporaire et de sa photo.", "PASSED");
-        insertChk.run(5, "Rapprochement découverte avec manquant", "مطابقة المكتشف مع مفقود سابق", "Permet d'associer un matériel trouvé avec un actif disparu.", "PASSED");
-        insertChk.run(6, "File d'attente hors-ligne idempotente", "رتل المزامنة عند انقطاع الشبكة", "Assure l'enregistrement local en mode déconnecté sans doublon.", "PASSED");
-        insertChk.run(7, "Résolution des conflits de synchro", "معالجة تعارضات المزامنة", "Arbitrage des divergences entre données locales et serveur.", "PASSED");
-        insertChk.run(8, "Journal d'audit et non-répudiation", "سجل التدقيق غير القابل للتعديل", "Vérifie l'horodatage et la traçabilité de chaque action.", "PASSED");
-        insertChk.run(9, "Verrouillage définitif de la campagne", "إقفال واعتماد الحملة نهائياً", "Interdit toute modification ultérieure une fois la campagne scellée.", "PASSED");
+        insertChk.run(1, "Scan d'un actif conforme", "مسح أصل مطابق في مكانه", "Vérifie l'identification d'un équipement présent à sa place.", "PASSED");
+        insertChk.run(2, "Détection d'un écart d'emplacement", "اكتشاف أصل في مكان غير مكانه", "Signale un actif trouvé dans une baie différente.", "PASSED");
+        insertChk.run(3, "Clôture de zone et calcul des manquants", "إغلاق المنطقة وحساب المفقودات", "Vérifie le déclenchement des manquants après clôture.", "PASSED");
       }
     } catch (e) {
       console.warn('Initial SQLite seed note:', e);
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // STATS
+  // ═══════════════════════════════════════════════════════════
   public getStats() {
     let size = 0;
     try {
-      if (fs.existsSync(this.dbPath)) {
-        size = fs.statSync(this.dbPath).size;
-      }
+      if (fs.existsSync(this.dbPath)) size = fs.statSync(this.dbPath).size;
     } catch {}
 
-    let totalAssets = 0;
-    let conforme = 0;
-    let locationDiff = 0;
-    let missing = 0;
-    let unverified = 0;
-    let discoveries = 0;
-    let mutations = 0;
-    let auditLogs = 0;
+    let totalAssets = 0, conforme = 0, locationDiff = 0, missing = 0, unverified = 0;
+    let discoveries = 0, mutations = 0, auditLogs = 0;
 
     if (this.db) {
       try {
@@ -421,18 +399,12 @@ export class LocalSQLiteEngine {
 
     return {
       engine: 'ELECTRON_SQLITE',
-      totalAssets,
-      conformeAssets: conforme,
-      locationDiffAssets: locationDiff,
-      missingAssets: missing,
-      unverifiedAssets: unverified,
-      totalDiscoveries: discoveries,
-      pendingDiscoveries: discoveries,
-      totalMutations: mutations,
-      pendingMutations: mutations,
+      totalAssets, conformeAssets: conforme, locationDiffAssets: locationDiff,
+      missingAssets: missing, unverifiedAssets: unverified,
+      totalDiscoveries: discoveries, pendingDiscoveries: discoveries,
+      totalMutations: mutations, pendingMutations: mutations,
       totalAuditLogs: auditLogs,
-      totalZones: 4,
-      closedZones: 3,
+      totalZones: 4, closedZones: 3,
       databasePath: this.dbPath,
       databaseSizeBytes: size || 1048576,
       journalMode: 'WAL (Write-Ahead Logging)',
@@ -452,14 +424,14 @@ export class LocalSQLiteEngine {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // USERS
+  // ═══════════════════════════════════════════════════════════
   public getUsers(): any[] {
     if (!this.db) return [];
     try {
       const rows = this.db.prepare('SELECT id, username, fullName, email, role, isActive, avatarUrl, lastLoginAt, createdAt, updatedAt FROM users ORDER BY createdAt ASC').all();
-      return rows.map((r: any) => ({
-        ...r,
-        isActive: Boolean(r.isActive)
-      }));
+      return rows.map((r: any) => ({ ...r, isActive: Boolean(r.isActive) }));
     } catch (e) {
       console.error('getUsers error:', e);
       return [];
@@ -468,8 +440,9 @@ export class LocalSQLiteEngine {
 
   public createUser(user: any): any {
     if (!this.db) return user;
+    // ✅ التعديل هنا: استخدام INSERT OR REPLACE لتحديث المستخدم إذا كان موجوداً
     const stmt = this.db.prepare(`
-      INSERT INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
+      INSERT OR REPLACE INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
@@ -529,7 +502,60 @@ export class LocalSQLiteEngine {
     );
   }
 
-  // --- Assets Operations ---
+  // ═══════════════════════════════════════════════════════════
+  // ✅ SYNC USERS from NestJS server
+  // ═══════════════════════════════════════════════════════════
+  public syncUsers(users: any[]): { synced: number; errors: number } {
+    if (!this.db) {
+      console.warn('[SQLite] syncUsers: DB not initialized');
+      return { synced: 0, errors: users.length };
+    }
+
+    let synced = 0;
+    let errors = 0;
+
+    for (const user of users) {
+      try {
+        this.db.prepare(`
+          INSERT INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
+          VALUES (@id, @username, @fullName, @email, @role, @isActive, @avatarUrl, @passwordHash, @lastLoginAt, @createdAt, @updatedAt)
+          ON CONFLICT(id) DO UPDATE SET
+            username = excluded.username,
+            fullName = excluded.fullName,
+            email = excluded.email,
+            role = excluded.role,
+            isActive = excluded.isActive,
+            avatarUrl = excluded.avatarUrl,
+            passwordHash = excluded.passwordHash,
+            lastLoginAt = excluded.lastLoginAt,
+            updatedAt = excluded.updatedAt
+        `).run({
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName || '',
+          email: user.email || '',
+          role: user.role,
+          isActive: user.isActive ? 1 : 0,
+          avatarUrl: user.avatarUrl || '',
+          passwordHash: user.passwordHash || '',
+          lastLoginAt: user.lastLoginAt || null,
+          createdAt: user.createdAt || new Date().toISOString(),
+          updatedAt: user.updatedAt || new Date().toISOString()
+        });
+        synced++;
+      } catch (err) {
+        console.error('[SQLite] syncUsers error for', user.username, ':', err);
+        errors++;
+      }
+    }
+
+    console.log(`[SQLite] syncUsers: ${synced} synced, ${errors} errors`);
+    return { synced, errors };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ASSETS
+  // ═══════════════════════════════════════════════════════════
   public getAssets(): any[] {
     if (!this.db) return [];
     try {
@@ -557,9 +583,7 @@ export class LocalSQLiteEngine {
         rfidVerified: Boolean(row.rfidVerified),
         serialVerified: Boolean(row.serialVerified)
       };
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   public searchAssets(query: string): any[] {
@@ -567,8 +591,8 @@ export class LocalSQLiteEngine {
     try {
       const q = `%${query.trim().toLowerCase()}%`;
       const rows = this.db.prepare(`
-        SELECT * FROM assets 
-        WHERE LOWER(id) LIKE ? OR LOWER(officialCode) LIKE ? OR LOWER(name) LIKE ? 
+        SELECT * FROM assets
+        WHERE LOWER(id) LIKE ? OR LOWER(officialCode) LIKE ? OR LOWER(name) LIKE ?
            OR LOWER(serialNumber) LIKE ? OR LOWER(barcode) LIKE ? OR LOWER(expectedBayLocation) LIKE ?
       `).all(q, q, q, q, q, q);
       return rows.map((r: any) => ({
@@ -577,9 +601,7 @@ export class LocalSQLiteEngine {
         rfidVerified: Boolean(r.rfidVerified),
         serialVerified: Boolean(r.serialVerified)
       }));
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   }
 
   public createAsset(asset: any): any {
@@ -623,23 +645,19 @@ export class LocalSQLiteEngine {
   public updateInventoryStatus(id: string, status: string, bayLocation?: string, user = 'TECH-941'): any {
     if (!this.db) return null;
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const updates: any = {
-      inventoryStatus: status,
-      lastScannedAt: now,
-      scannedBy: user
-    };
+    const updates: any = { inventoryStatus: status, lastScannedAt: now, scannedBy: user };
     if (bayLocation) updates.scannedBayLocation = bayLocation;
     return this.updateAsset(id, updates);
   }
 
-  // --- Discoveries Operations ---
+  // ═══════════════════════════════════════════════════════════
+  // DISCOVERIES
+  // ═══════════════════════════════════════════════════════════
   public getDiscoveries(): any[] {
     if (!this.db) return [];
     try {
       return this.db.prepare('SELECT * FROM discoveries ORDER BY foundAt DESC').all();
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   }
 
   public createDiscovery(discovery: any): any {
@@ -709,33 +727,26 @@ export class LocalSQLiteEngine {
     this.db.prepare("UPDATE discoveries SET status = 'REJETE', rejectionReason = ? WHERE id = ?").run(reason, id);
   }
 
-  // --- Campaign & Zones Operations ---
+  // ═══════════════════════════════════════════════════════════
+  // CAMPAIGN & ZONES
+  // ═══════════════════════════════════════════════════════════
   public getCampaign(): any {
     if (!this.db) return null;
     try {
       const camp = this.db.prepare('SELECT * FROM campaigns LIMIT 1').get();
       if (!camp) return null;
       const zones = this.db.prepare('SELECT * FROM zones ORDER BY id ASC').all();
-      return {
-        ...camp,
-        zones: zones.map((z: any) => ({
-          ...z,
-          isClosed: Boolean(z.isClosed)
-        }))
-      };
-    } catch {
-      return null;
-    }
+      return { ...camp, zones: zones.map((z: any) => ({ ...z, isClosed: Boolean(z.isClosed) })) };
+    } catch { return null; }
   }
 
   public closeZone(zoneId: string, user: string): void {
     if (!this.db) return;
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
     this.db.prepare('UPDATE zones SET isClosed = 1, closedAt = ?, closedBy = ? WHERE id = ?').run(now, user, zoneId);
-    // Mark unverified assets in this zone as MANQUANT
     this.db.prepare(`
-      UPDATE assets 
-      SET inventoryStatus = 'MANQUANT' 
+      UPDATE assets
+      SET inventoryStatus = 'MANQUANT'
       WHERE expectedBayLocation LIKE ? AND inventoryStatus = 'NON_VERIFIE'
     `).run(`${zoneId}%`);
   }
@@ -750,14 +761,14 @@ export class LocalSQLiteEngine {
     this.db.prepare("UPDATE campaigns SET status = 'VERROUILLEE'").run();
   }
 
-  // --- Audit Logs Operations ---
+  // ═══════════════════════════════════════════════════════════
+  // AUDIT LOGS
+  // ═══════════════════════════════════════════════════════════
   public getAuditLogs(): any[] {
     if (!this.db) return [];
     try {
       return this.db.prepare('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 500').all();
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   }
 
   public addAuditLog(entry: any): any {
@@ -780,18 +791,15 @@ export class LocalSQLiteEngine {
     return newLog;
   }
 
-  // --- Offline Mutations Queue Operations ---
+  // ═══════════════════════════════════════════════════════════
+  // MUTATIONS
+  // ═══════════════════════════════════════════════════════════
   public getMutations(): any[] {
     if (!this.db) return [];
     try {
       const rows = this.db.prepare('SELECT * FROM offline_mutations ORDER BY timestamp DESC').all();
-      return rows.map((r: any) => ({
-        ...r,
-        payload: r.payloadJson ? JSON.parse(r.payloadJson) : {}
-      }));
-    } catch {
-      return [];
-    }
+      return rows.map((r: any) => ({ ...r, payload: r.payloadJson ? JSON.parse(r.payloadJson) : {} }));
+    } catch { return []; }
   }
 
   public addMutation(mutation: any): any {
@@ -826,38 +834,35 @@ export class LocalSQLiteEngine {
     this.db.prepare('DELETE FROM offline_mutations').run();
   }
 
-  // --- Conflicts Operations ---
+  // ═══════════════════════════════════════════════════════════
+  // CONFLICTS
+  // ═══════════════════════════════════════════════════════════
   public getConflicts(): any[] {
     if (!this.db) return [];
     try {
       const rows = this.db.prepare('SELECT * FROM conflicts ORDER BY timestamp DESC').all();
-      return rows.map((r: any) => ({
-        ...r,
-        resolved: Boolean(r.resolved)
-      }));
-    } catch {
-      return [];
-    }
+      return rows.map((r: any) => ({ ...r, resolved: Boolean(r.resolved) }));
+    } catch { return []; }
   }
 
   public resolveConflict(conflictId: string, resolution: string): void {
     if (!this.db) return;
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
     this.db.prepare(`
-      UPDATE conflicts 
-      SET resolved = 1, resolutionDecision = ?, resolvedAt = ?, resolvedBy = 'MGR-ADMIN-01' 
+      UPDATE conflicts
+      SET resolved = 1, resolutionDecision = ?, resolvedAt = ?, resolvedBy = 'MGR-ADMIN-01'
       WHERE id = ?
     `).run(resolution, now, conflictId);
   }
 
-  // --- Checklist Operations ---
+  // ═══════════════════════════════════════════════════════════
+  // CHECKLIST
+  // ═══════════════════════════════════════════════════════════
   public getChecklist(): any[] {
     if (!this.db) return [];
     try {
       return this.db.prepare('SELECT * FROM checklist ORDER BY id ASC').all();
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   }
 
   public updateChecklist(id: number, status: string): void {
@@ -866,13 +871,15 @@ export class LocalSQLiteEngine {
     this.db.prepare('UPDATE checklist SET status = ?, testedAt = ? WHERE id = ?').run(status, now, id);
   }
 
-  // --- Backup & SQL Export ---
+  // ═══════════════════════════════════════════════════════════
+  // BACKUP / RESTORE / EXPORT
+  // ═══════════════════════════════════════════════════════════
   public exportBackup(): any {
     return {
       version: '1.0.0',
       exportedAt: new Date().toISOString(),
       source: 'KAF-INVENTAIRE Electron Native SQLite',
-      schemaVersion: 4,
+      schemaVersion: 5,
       data: {
         assets: this.getAssets(),
         discoveries: this.getDiscoveries(),
@@ -920,18 +927,20 @@ export class LocalSQLiteEngine {
 
   public exportSqlDump(): string {
     const assets = this.getAssets();
-    const discoveries = this.getDiscoveries();
+    const users = this.getUsers();
     const now = new Date().toISOString();
     let sql = `-- ====================================================================\n`;
     sql += `-- KAF-INVENTAIRE Native Windows SQLite Database Dump\n`;
     sql += `-- Exported: ${now}\n`;
     sql += `-- ====================================================================\n\n`;
-    sql += `PRAGMA foreign_keys = ON;\n`;
-    sql += `PRAGMA journal_mode = WAL;\n\n`;
+    sql += `PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\n\n`;
 
     sql += `BEGIN TRANSACTION;\n`;
     for (const a of assets) {
       sql += `INSERT OR REPLACE INTO assets (id, officialCode, name, barcode, inventoryStatus) VALUES ('${a.id}', '${a.officialCode}', '${(a.name || '').replace(/'/g, "''")}', '${a.barcode}', '${a.inventoryStatus}');\n`;
+    }
+    for (const u of users) {
+      sql += `INSERT OR REPLACE INTO users (id, username, fullName, role) VALUES ('${u.id}', '${u.username}', '${(u.fullName || '').replace(/'/g, "''")}', '${u.role}');\n`;
     }
     sql += `COMMIT;\n`;
     return sql;

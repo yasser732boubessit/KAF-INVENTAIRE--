@@ -1,73 +1,140 @@
 /**
- * KAF-INVENTAIRE - Simplified & Resilient Password Service
- * Allows transparent plain-text password verification while maintaining
- * backward-compatibility with SHA-256 hashes.
+ * KAF-INVENTAIRE - Security & Password Hashing Service
+ * 
+ * ✅ Supports 3 hash types :
+ *   1. bcrypt (compatible NestJS backend)
+ *   2. SHA-256 with salt (legacy)
+ *   3. Plaintext (fallback for demo accounts)
+ * 
+ * ✅ Works in Browser, Electron Renderer, and Node.js
  */
 
-import { AppUser } from './permissions';
+import { AppUser, UserRole } from './permissions';
+
+const KAF_SALT = 'KAF_SALT_2026_ENTERPRISE';
 
 export class CryptoSecurity {
   /**
-   * Returns clean password directly for simplified management without encryption issues.
+   * Get Web Crypto API safely across all environments
    */
-  public static async hashPassword(password: string): Promise<string> {
-    return password.trim();
+  private static getCryptoAPI(): Crypto {
+    const g: any = globalThis;
+    if (g.crypto && g.crypto.subtle) return g.crypto;
+    if (g.msCrypto && g.msCrypto.subtle) return g.msCrypto;
+    throw new Error('Web Crypto API indisponible');
   }
 
   /**
-   * Verifies if a password matches the stored credential.
-   * Supports:
-   * 1. Direct plain text match (immediate & reliable)
-   * 2. Default accounts shortcuts (admin123, agent123, ctrl123, etc.)
-   * 3. Legacy salted SHA-256
-   * 4. Legacy raw SHA-256
+   * Detects if a string looks like a bcrypt hash
+   * bcrypt hashes start with $2a$, $2b$, $2y$, or $2x$
    */
-  public static async verifyPassword(password: string, stored: string): Promise<boolean> {
-    if (!password || !stored) return false;
+  private static isBcryptHash(str: string): boolean {
+    return /^\$2[abyx]\$\d{2}\$/.test(str);
+  }
+
+  /**
+   * Detects if a string looks like a SHA-256 hex hash (64 chars, hex)
+   */
+  private static isSha256Hash(str: string): boolean {
+    return /^[a-f0-9]{64}$/i.test(str);
+  }
+
+  /**
+   * Hash a password using SHA-256 + salt (local storage format)
+   */
+  public static async hashPassword(
+    password: string,
+    salt: string = KAF_SALT
+  ): Promise<string> {
+    if (!password || typeof password !== 'string') {
+      throw new Error('hashPassword: password invalide');
+    }
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + salt);
+    const cryptoAPI = this.getCryptoAPI();
+    const hashBuffer = await cryptoAPI.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * Verify a password against ANY of these formats:
+   *   - bcrypt hash    (backend format)
+   *   - SHA-256 hash   (frontend format)
+   *   - plaintext      (demo accounts)
+   * 
+   * @param password  The password to verify
+   * @param stored    The stored credential (bcrypt hash, SHA-256 hash, or plaintext)
+   * @param salt      Salt for SHA-256 (default: KAF_SALT_2026_ENTERPRISE)
+   */
+  public static async verifyPassword(
+    password: string,
+    stored: string,
+    salt: string = KAF_SALT
+  ): Promise<boolean> {
+    if (!password || !stored) {
+      console.warn('[Crypto] verifyPassword: missing params');
+      return false;
+    }
+
     const p = password.trim();
     const s = stored.trim();
 
-    // 1. Direct plain text comparison (simplified mode)
-    if (p === s) return true;
-
-    // 2. Default accounts shortcuts
-    if ((p === 'admin123' || p === 'admin') && (s === 'admin123' || s === 'admin' || s.includes('7be41f') || s.includes('e6c279') || s.includes('240be5'))) {
-      return true;
-    }
-    if ((p === 'agent123' || p === 'agent') && (s === 'agent123' || s === 'agent' || s.includes('fdad93') || s.includes('35d72e'))) {
-      return true;
-    }
-    if ((p === 'ctrl123' || p === 'ctrl') && (s === 'ctrl123' || s === 'ctrl' || s.includes('846ce8') || s.includes('8b6d85'))) {
-      return true;
-    }
-    if (p === 'password123' || p === '123456') {
-      return true;
-    }
-
-    // 3. Fallback SHA-256 verification (Browser Web Crypto API)
-    try {
-      if (typeof crypto !== 'undefined' && crypto.subtle) {
-        const encoder = new TextEncoder();
-        // Salted check
-        const saltedData = encoder.encode(p + 'KAF_SALT_2026_ENTERPRISE');
-        const hashBuffer = await crypto.subtle.digest('SHA-256', saltedData);
-        const hex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-        if (hex.toLowerCase() === s.toLowerCase()) return true;
-
-        // Raw check
-        const rawBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(p));
-        const rawHex = Array.from(new Uint8Array(rawBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-        if (rawHex.toLowerCase() === s.toLowerCase()) return true;
+    // ═══════════════════════════════════════════════════════════
+    // CASE 1 — bcrypt hash ($2a$, $2b$, $2y$, $2x$)
+    // ═══════════════════════════════════════════════════════════
+    if (this.isBcryptHash(s)) {
+      try {
+        // Dynamic import for bcryptjs (works in browser + Electron)
+        const bcrypt = await import('bcryptjs');
+        const match = await bcrypt.compare(p, s);
+        console.log('[Crypto] bcrypt verification:', match ? '✅' : '❌');
+        return match;
+      } catch (err) {
+        console.error('[Crypto] bcrypt compare error:', err);
+        return false;
       }
-    } catch {}
+    }
 
-    return false;
+    // ═══════════════════════════════════════════════════════════
+    // CASE 2 — SHA-256 hash (64 hex chars)
+    // ═══════════════════════════════════════════════════════════
+    if (this.isSha256Hash(s)) {
+      try {
+        const computed = await this.hashPassword(p, salt);
+        const match = computed.toLowerCase() === s.toLowerCase();
+        console.log('[Crypto] SHA-256 verification:', match ? '✅' : '❌');
+        return match;
+      } catch (err) {
+        console.error('[Crypto] SHA-256 compare error:', err);
+        return false;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CASE 3 — Plaintext (demo accounts)
+    // ═══════════════════════════════════════════════════════════
+    const match = p === s;
+    console.log('[Crypto] plaintext verification:', match ? '✅' : '❌');
+    return match;
+  }
+
+  /**
+   * Hash a password using bcrypt (for creating new accounts)
+   * Uses bcryptjs which works in browser + Electron
+   */
+  public static async hashPasswordBcrypt(password: string, rounds = 10): Promise<string> {
+    const bcrypt = await import('bcryptjs');
+    return bcrypt.hash(password, rounds);
   }
 }
 
 /**
- * Seed users conforming to the 3 mandatory operational roles
- * Configured with direct, transparent passwords (admin123, agent123, ctrl123)
+ * Seed users for OFFLINE MODE
+ * These are used when SQLite is empty AND server is unreachable
+ * 
+ * ⚠️ IMPORTANT: These passwords are plaintext for demo.
+ * In production, replace with real hashes from the server.
  */
 export const INITIAL_USERS: AppUser[] = [
   {

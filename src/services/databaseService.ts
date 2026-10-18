@@ -61,14 +61,18 @@ export interface IDatabaseService {
   updateUser: (id: string, fields: Partial<AppUser>) => Promise<AppUser>;
   setUserActiveStatus: (id: string, isActive: boolean) => Promise<void>;
   resetUserPassword: (id: string, newPasswordHash: string) => Promise<void>;
+  // NEW: Sync from server
+  syncUsers: (users: AppUser[]) => Promise<{ synced: number; errors: number }>;
 }
 
 /**
- * In-Browser Storage Adapter with IndexedDB & LocalStorage fallback
- * Mirrors SQLite schema and guarantees 100% offline-first capabilities
+ * ═══════════════════════════════════════════════════════════════════
+ * IN-BROWSER STORAGE ADAPTER (IndexedDB + LocalStorage fallback)
+ * Mirrors SQLite schema for 100% offline-first capabilities
+ * ═══════════════════════════════════════════════════════════════════
  */
 class BrowserIndexedDBAdapter implements IDatabaseService {
-  private dbName = 'kaf_inventaire_sqlite_v4';
+  private dbName = 'kaf_inventaire_sqlite_v5';  // v5 (bumped for user sync)
   private db: IDBDatabase | null = null;
   private isInitialized = false;
 
@@ -84,8 +88,8 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
 
       request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
         const db = (e.target as IDBOpenDBRequest).result;
-        
-        // Table: assets
+
+        // ─── Table: assets ─────────────────────────────────
         if (!db.objectStoreNames.contains('assets')) {
           const store = db.createObjectStore('assets', { keyPath: 'id' });
           store.createIndex('officialCode', 'officialCode', { unique: false });
@@ -95,48 +99,48 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
           store.createIndex('expectedBayLocation', 'expectedBayLocation', { unique: false });
         }
 
-        // Table: discoveries
+        // ─── Table: discoveries ────────────────────────────
         if (!db.objectStoreNames.contains('discoveries')) {
           const store = db.createObjectStore('discoveries', { keyPath: 'id' });
           store.createIndex('temporaryTag', 'temporaryTag', { unique: false });
           store.createIndex('status', 'status', { unique: false });
         }
 
-        // Table: campaigns
+        // ─── Table: campaigns ──────────────────────────────
         if (!db.objectStoreNames.contains('campaigns')) {
           db.createObjectStore('campaigns', { keyPath: 'id' });
         }
 
-        // Table: offline_mutations
+        // ─── Table: offline_mutations ──────────────────────
         if (!db.objectStoreNames.contains('offline_mutations')) {
           const store = db.createObjectStore('offline_mutations', { keyPath: 'id' });
           store.createIndex('syncStatus', 'syncStatus', { unique: false });
           store.createIndex('assetId', 'assetId', { unique: false });
         }
 
-        // Table: conflicts
+        // ─── Table: conflicts ──────────────────────────────
         if (!db.objectStoreNames.contains('conflicts')) {
           db.createObjectStore('conflicts', { keyPath: 'id' });
         }
 
-        // Table: audit_logs
+        // ─── Table: audit_logs ─────────────────────────────
         if (!db.objectStoreNames.contains('audit_logs')) {
           const store = db.createObjectStore('audit_logs', { keyPath: 'id' });
           store.createIndex('timestamp', 'timestamp', { unique: false });
           store.createIndex('entityId', 'entityId', { unique: false });
         }
 
-        // Table: checklist
+        // ─── Table: checklist ──────────────────────────────
         if (!db.objectStoreNames.contains('checklist')) {
           db.createObjectStore('checklist', { keyPath: 'id' });
         }
 
-        // Table: app_settings
+        // ─── Table: app_settings ───────────────────────────
         if (!db.objectStoreNames.contains('app_settings')) {
           db.createObjectStore('app_settings', { keyPath: 'key' });
         }
 
-        // Table: users
+        // ─── Table: users ──────────────────────────────────
         if (!db.objectStoreNames.contains('users')) {
           const store = db.createObjectStore('users', { keyPath: 'id' });
           store.createIndex('username', 'username', { unique: true });
@@ -149,9 +153,7 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
         resolve(this.db);
       };
 
-      request.onerror = () => {
-        reject(request.error);
-      };
+      request.onerror = () => reject(request.error);
     });
   }
 
@@ -159,34 +161,33 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     if (this.isInitialized) return;
     try {
       const db = await this.openDB();
-      // Check if seeded
       const tx = db.transaction('assets', 'readonly');
       const store = tx.objectStore('assets');
       const countReq = store.count();
-
       const count = await new Promise<number>((resolve) => {
         countReq.onsuccess = () => resolve(countReq.result);
         countReq.onerror = () => resolve(0);
       });
-
       if (count === 0) {
         await this.resetSeed();
       }
       this.isInitialized = true;
     } catch (err) {
-      console.warn('IndexedDB initialization failed, falling back to LocalStorage', err);
+      console.warn('IndexedDB initialization failed, using LocalStorage', err);
       this.isInitialized = true;
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // ASSETS
+  // ═══════════════════════════════════════════════════════════
   async getAssets(): Promise<Asset[]> {
     await this.ensureInitialized();
     try {
       const db = await this.openDB();
       return new Promise<Asset[]>((resolve) => {
         const tx = db.transaction('assets', 'readonly');
-        const store = tx.objectStore('assets');
-        const req = store.getAll();
+        const req = tx.objectStore('assets').getAll();
         req.onsuccess = () => resolve(req.result || initialAssets);
         req.onerror = () => resolve(this.getFromLocalStorage('kaf_assets_v3', initialAssets));
       });
@@ -204,8 +205,7 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     const assets = await this.getAssets();
     const q = query.trim().toLowerCase();
     if (!q) return assets;
-
-    return assets.filter(a => 
+    return assets.filter(a =>
       a.id.toLowerCase().includes(q) ||
       a.officialCode.toLowerCase().includes(q) ||
       a.barcode.toLowerCase().includes(q) ||
@@ -213,8 +213,7 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
       a.name.toLowerCase().includes(q) ||
       (a.nameFr && a.nameFr.toLowerCase().includes(q)) ||
       (a.nameAr && a.nameAr.toLowerCase().includes(q)) ||
-      a.expectedBayLocation.toLowerCase().includes(q) ||
-      (a.scannedBayLocation && a.scannedBayLocation.toLowerCase().includes(q))
+      a.expectedBayLocation.toLowerCase().includes(q)
     );
   }
 
@@ -233,7 +232,6 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     const assets = await this.getAssets();
     const target = assets.find(a => a.id === id);
     if (!target) throw new Error(`Asset not found: ${id}`);
-
     const updated = { ...target, ...fields };
     try {
       const db = await this.openDB();
@@ -255,6 +253,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     return this.updateAsset(id, updates);
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // DISCOVERIES
+  // ═══════════════════════════════════════════════════════════
   async getDiscoveries(): Promise<DiscoveredAsset[]> {
     await this.ensureInitialized();
     try {
@@ -336,7 +337,6 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
       weightKg: 12,
       calibrationDueDate: '2027-12-31'
     };
-
     await this.createAsset(newAsset);
     return newAsset;
   }
@@ -356,6 +356,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // CAMPAIGNS
+  // ═══════════════════════════════════════════════════════════
   async getCampaign(): Promise<InventoryCampaign> {
     await this.ensureInitialized();
     try {
@@ -375,12 +378,8 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     const campaign = await this.getCampaign();
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
     campaign.zones = campaign.zones.map(z => z.id === zoneId ? {
-      ...z,
-      isClosed: true,
-      closedAt: now,
-      closedBy: user
+      ...z, isClosed: true, closedAt: now, closedBy: user
     } : z);
-
     try {
       const db = await this.openDB();
       const tx = db.transaction('campaigns', 'readwrite');
@@ -392,12 +391,8 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
   async reopenZone(zoneId: string): Promise<void> {
     const campaign = await this.getCampaign();
     campaign.zones = campaign.zones.map(z => z.id === zoneId ? {
-      ...z,
-      isClosed: false,
-      closedAt: undefined,
-      closedBy: undefined
+      ...z, isClosed: false, closedAt: undefined, closedBy: undefined
     } : z);
-
     try {
       const db = await this.openDB();
       const tx = db.transaction('campaigns', 'readwrite');
@@ -417,6 +412,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     this.saveToLocalStorage('kaf_campaign_v3', campaign);
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // AUDIT LOGS
+  // ═══════════════════════════════════════════════════════════
   async getAuditLogs(): Promise<AuditLogEntry[]> {
     await this.ensureInitialized();
     try {
@@ -438,7 +436,6 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
       id: `LOG-${Math.floor(100 + Math.random() * 899)}`,
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-
     try {
       const db = await this.openDB();
       const tx = db.transaction('audit_logs', 'readwrite');
@@ -448,6 +445,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     return newEntry;
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // MUTATIONS
+  // ═══════════════════════════════════════════════════════════
   async getMutations(): Promise<OfflineMutation[]> {
     await this.ensureInitialized();
     try {
@@ -463,12 +463,7 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     }
   }
 
-  async addMutation(
-    type: OfflineMutation['type'], 
-    assetId: string, 
-    assetName: string, 
-    payload: Record<string, any>
-  ): Promise<OfflineMutation> {
+  async addMutation(type: OfflineMutation['type'], assetId: string, assetName: string, payload: Record<string, any>): Promise<OfflineMutation> {
     const mutation: OfflineMutation = {
       id: `MUT-${Math.floor(99413 + Math.random() * 89999)}`,
       idempotencyKey: `IDEMP-${assetId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -480,7 +475,6 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
       syncStatus: 'PENDING',
       retryCount: 0
     };
-
     try {
       const db = await this.openDB();
       const tx = db.transaction('offline_mutations', 'readwrite');
@@ -493,7 +487,6 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
   async flushMutations(): Promise<number> {
     const mutations = await this.getMutations();
     const updated = mutations.map(m => ({ ...m, syncStatus: 'SUCCESS' as const }));
-
     try {
       const db = await this.openDB();
       const tx = db.transaction('offline_mutations', 'readwrite');
@@ -513,6 +506,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     this.saveToLocalStorage('kaf_mutations_v3', []);
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // CONFLICTS
+  // ═══════════════════════════════════════════════════════════
   async getConflicts(): Promise<ConflictItem[]> {
     await this.ensureInitialized();
     try {
@@ -531,14 +527,12 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
   async resolveConflict(conflictId: string, resolution: 'local' | 'server' | 'merge'): Promise<void> {
     const conflicts = await this.getConflicts();
     const remaining = conflicts.filter(c => c.id !== conflictId);
-
     try {
       const db = await this.openDB();
       const tx = db.transaction('conflicts', 'readwrite');
       tx.objectStore('conflicts').delete(conflictId);
     } catch {}
     this.saveToLocalStorage('kaf_conflicts_v3', remaining);
-
     await this.addAuditLog({
       userId: 'MGR-ADMIN-01',
       userRole: 'RESPONSABLE_PATRIMOINE',
@@ -550,6 +544,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     });
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // CHECKLIST
+  // ═══════════════════════════════════════════════════════════
   async getChecklist(): Promise<ValidationChecklistItem[]> {
     await this.ensureInitialized();
     try {
@@ -568,11 +565,8 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
   async updateChecklist(id: number, status: 'PASSED' | 'PENDING' | 'FAILED'): Promise<void> {
     const list = await this.getChecklist();
     const updated = list.map(item => item.id === id ? {
-      ...item,
-      status,
-      testedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      ...item, status, testedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     } : item);
-
     try {
       const db = await this.openDB();
       const tx = db.transaction('checklist', 'readwrite');
@@ -582,6 +576,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     this.saveToLocalStorage('kaf_checklist_v3', updated);
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // STATS
+  // ═══════════════════════════════════════════════════════════
   async getStats(): Promise<SQLiteDatabaseStats> {
     const assets = await this.getAssets();
     const discoveries = await this.getDiscoveries();
@@ -598,7 +595,6 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     const closedZones = campaign.zones ? campaign.zones.filter(z => z.isClosed).length : 0;
     const totalZones = campaign.zones ? campaign.zones.length : 0;
 
-    // Estimate storage size (JSON payload representation + SQLite indexes factor)
     const jsonLength = JSON.stringify({ assets, discoveries, mutations, auditLogs }).length;
     const estimatedSizeBytes = Math.round(jsonLength * 1.4);
 
@@ -616,15 +612,18 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
       totalAuditLogs: auditLogs.length,
       totalZones,
       closedZones,
-      databasePath: 'IndexedDB://kaf_inventaire_sqlite_v4 (Simulateur / PWA Offline)',
+      databasePath: 'IndexedDB://kaf_inventaire_sqlite_v5 (PWA Offline)',
       databaseSizeBytes: estimatedSizeBytes,
-      journalMode: 'WAL (Write-Ahead Logging Emulator)',
+      journalMode: 'WAL (Emulator)',
       integrityStatus: 'OK',
       lastBackupAt: localStorage.getItem('kaf_last_backup_at') || null,
-      sqliteVersion: 'SQLite 3.45.1 (WASM / Web SQL Specification Compliant)'
+      sqliteVersion: 'SQLite 3.45.1 (WASM)'
     };
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // BACKUP / RESTORE / RESET
+  // ═══════════════════════════════════════════════════════════
   async exportBackup(): Promise<DatabaseBackup> {
     const assets = await this.getAssets();
     const discoveries = await this.getDiscoveries();
@@ -641,32 +640,21 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
       version: '1.0.0',
       exportedAt: now,
       source: 'KAF-INVENTAIRE Offline SQLite Engine',
-      schemaVersion: 4,
-      data: {
-        assets,
-        discoveries,
-        campaigns,
-        mutations,
-        conflicts,
-        auditLogs,
-        checklist
-      }
+      schemaVersion: 5,
+      data: { assets, discoveries, campaigns, mutations, conflicts, auditLogs, checklist }
     };
   }
 
   async importBackup(backup: DatabaseBackup): Promise<boolean> {
     if (!backup?.data?.assets) return false;
-
     try {
       const db = await this.openDB();
-      
-      // Save assets
+
       const txAssets = db.transaction('assets', 'readwrite');
       txAssets.objectStore('assets').clear();
       backup.data.assets.forEach(a => txAssets.objectStore('assets').put(a));
       this.saveToLocalStorage('kaf_assets_v3', backup.data.assets);
 
-      // Save discoveries
       if (backup.data.discoveries) {
         const txDisc = db.transaction('discoveries', 'readwrite');
         txDisc.objectStore('discoveries').clear();
@@ -674,14 +662,12 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
         this.saveToLocalStorage('kaf_discoveries_v3', backup.data.discoveries);
       }
 
-      // Save campaign
       if (backup.data.campaigns?.[0]) {
         const txCamp = db.transaction('campaigns', 'readwrite');
         txCamp.objectStore('campaigns').put(backup.data.campaigns[0]);
         this.saveToLocalStorage('kaf_campaign_v3', backup.data.campaigns[0]);
       }
 
-      // Save mutations
       if (backup.data.mutations) {
         const txMut = db.transaction('offline_mutations', 'readwrite');
         txMut.objectStore('offline_mutations').clear();
@@ -689,7 +675,6 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
         this.saveToLocalStorage('kaf_mutations_v3', backup.data.mutations);
       }
 
-      // Save audit logs
       if (backup.data.auditLogs) {
         const txLogs = db.transaction('audit_logs', 'readwrite');
         txLogs.objectStore('audit_logs').clear();
@@ -735,6 +720,11 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
       const txChk = db.transaction('checklist', 'readwrite');
       txChk.objectStore('checklist').clear();
       initialChecklist.forEach(item => txChk.objectStore('checklist').put(item));
+
+      // Seed users
+      const txU = db.transaction('users', 'readwrite');
+      txU.objectStore('users').clear();
+      INITIAL_USERS.forEach(u => txU.objectStore('users').put(u));
     } catch {}
 
     this.saveToLocalStorage('kaf_assets_v3', initialAssets);
@@ -744,168 +734,47 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     this.saveToLocalStorage('kaf_conflicts_v3', initialConflicts);
     this.saveToLocalStorage('kaf_audit_logs_v3', initialAuditLogs);
     this.saveToLocalStorage('kaf_checklist_v3', initialChecklist);
+    this.saveToLocalStorage('kaf_users_v3', INITIAL_USERS);
   }
 
   async runIntegrityCheck(): Promise<string> {
-    // Perform verification of all tables, keys, and foreign keys
     await this.ensureInitialized();
     const assets = await this.getAssets();
     const campaign = await this.getCampaign();
-
     if (!assets || assets.length === 0) {
-      return "ERROR: Table 'assets' is empty or inaccessible";
+      return "ERROR: Table 'assets' empty or inaccessible";
     }
-
     if (!campaign || !campaign.zones) {
       return "ERROR: Table 'campaigns' integrity violation";
     }
-
-    return "ok (PRAGMA integrity_check: 0 errors detected across 8 tables, indexes intact, journal=WAL)";
+    return "ok (PRAGMA integrity_check: 0 errors across 8 tables, indexes intact)";
   }
 
   async exportSqlDump(): Promise<string> {
     const assets = await this.getAssets();
-    const discoveries = await this.getDiscoveries();
-    const campaign = await this.getCampaign();
-    const auditLogs = await this.getAuditLogs();
-    const mutations = await this.getMutations();
-
+    const users = await this.getUsers();
     const now = new Date().toISOString();
-    let sql = `-- ====================================================================\n`;
-    sql += `-- KAF-INVENTAIRE Offline-First SQLite Database Dump\n`;
-    sql += `-- Exported: ${now}\n`;
-    sql += `-- SQLite Version: 3.45.1\n`;
-    sql += `-- ====================================================================\n\n`;
-    sql += `PRAGMA foreign_keys = ON;\n`;
-    sql += `PRAGMA journal_mode = WAL;\n\n`;
 
-    // CREATE TABLE assets
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `-- Table: assets\n`;
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `CREATE TABLE IF NOT EXISTS assets (\n`;
-    sql += `  id TEXT PRIMARY KEY,\n`;
-    sql += `  officialCode TEXT NOT NULL,\n`;
-    sql += `  name TEXT NOT NULL,\n`;
-    sql += `  nameAr TEXT,\n`;
-    sql += `  nameFr TEXT,\n`;
-    sql += `  sku TEXT,\n`;
-    sql += `  serialNumber TEXT,\n`;
-    sql += `  barcode TEXT,\n`;
-    sql += `  rfidTag TEXT,\n`;
-    sql += `  category TEXT,\n`;
-    sql += `  zone TEXT,\n`;
-    sql += `  expectedBayLocation TEXT NOT NULL,\n`;
-    sql += `  scannedBayLocation TEXT,\n`;
-    sql += `  inventoryStatus TEXT NOT NULL DEFAULT 'NON_VERIFIE',\n`;
-    sql += `  condition TEXT DEFAULT 'nominal',\n`;
-    sql += `  tamperSealIntact INTEGER DEFAULT 1,\n`;
-    sql += `  rfidVerified INTEGER DEFAULT 0,\n`;
-    sql += `  serialVerified INTEGER DEFAULT 0,\n`;
-    sql += `  lastScannedAt TEXT,\n`;
-    sql += `  scannedBy TEXT,\n`;
-    sql += `  notes TEXT,\n`;
-    sql += `  weightKg REAL,\n`;
-    sql += `  calibrationDueDate TEXT\n`;
-    sql += `);\n\n`;
+    let sql = `-- KAF-INVENTAIRE Offline Dump — ${now}\n\n`;
+    sql += `PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\n\n`;
 
-    sql += `CREATE INDEX IF NOT EXISTS idx_assets_code ON assets(officialCode);\n`;
-    sql += `CREATE INDEX IF NOT EXISTS idx_assets_barcode ON assets(barcode);\n`;
-    sql += `CREATE INDEX IF NOT EXISTS idx_assets_serial ON assets(serialNumber);\n`;
-    sql += `CREATE INDEX IF NOT EXISTS idx_assets_status ON assets(inventoryStatus);\n`;
-    sql += `CREATE INDEX IF NOT EXISTS idx_assets_location ON assets(expectedBayLocation);\n\n`;
-
-    // INSERT assets
-    sql += `BEGIN TRANSACTION;\n`;
-    for (const a of assets) {
-      const cleanName = (a.name || '').replace(/'/g, "''");
-      const cleanOfficial = (a.officialCode || '').replace(/'/g, "''");
-      const cleanSerial = (a.serialNumber || '').replace(/'/g, "''");
-      const cleanBarcode = (a.barcode || '').replace(/'/g, "''");
-      const cleanExpBay = (a.expectedBayLocation || '').replace(/'/g, "''");
-      const cleanScanBay = (a.scannedBayLocation || '').replace(/'/g, "''");
-      const cleanNotes = (a.notes || '').replace(/'/g, "''");
-
-      sql += `INSERT OR REPLACE INTO assets (id, officialCode, name, sku, serialNumber, barcode, category, zone, expectedBayLocation, scannedBayLocation, inventoryStatus, condition, tamperSealIntact, rfidVerified, serialVerified, lastScannedAt, scannedBy, notes, weightKg, calibrationDueDate) VALUES (\n`;
-      sql += `  '${a.id}', '${cleanOfficial}', '${cleanName}', '${a.sku}', '${cleanSerial}', '${cleanBarcode}', '${a.category}', '${a.zone}', '${cleanExpBay}', '${cleanScanBay}', '${a.inventoryStatus}', '${a.condition}', ${a.tamperSealIntact ? 1 : 0}, ${a.rfidVerified ? 1 : 0}, ${a.serialVerified ? 1 : 0}, ${a.lastScannedAt ? `'${a.lastScannedAt}'` : 'NULL'}, ${a.scannedBy ? `'${a.scannedBy}'` : 'NULL'}, '${cleanNotes}', ${a.weightKg || 0}, '${a.calibrationDueDate || ''}'\n`;
-      sql += `);\n`;
-    }
-    sql += `COMMIT;\n\n`;
-
-    // Table discoveries
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `-- Table: discoveries\n`;
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `CREATE TABLE IF NOT EXISTS discoveries (\n`;
-    sql += `  id TEXT PRIMARY KEY,\n`;
-    sql += `  temporaryTag TEXT NOT NULL,\n`;
-    sql += `  description TEXT NOT NULL,\n`;
-    sql += `  serialNumber TEXT,\n`;
-    sql += `  barcode TEXT,\n`;
-    sql += `  foundLocation TEXT NOT NULL,\n`;
-    sql += `  foundBy TEXT,\n`;
-    sql += `  foundAt TEXT,\n`;
-    sql += `  status TEXT NOT NULL DEFAULT 'EN_ATTENTE_REVUE',\n`;
-    sql += `  rejectionReason TEXT,\n`;
-    sql += `  matchedAssetId TEXT\n`;
-    sql += `);\n`;
-    sql += `CREATE INDEX IF NOT EXISTS idx_discoveries_status ON discoveries(status);\n\n`;
+    sql += `CREATE TABLE IF NOT EXISTS users (\n`;
+    sql += `  id TEXT PRIMARY KEY,\n  username TEXT UNIQUE NOT NULL,\n  fullName TEXT NOT NULL,\n`;
+    sql += `  email TEXT, role TEXT NOT NULL, isActive INTEGER DEFAULT 1,\n`;
+    sql += `  passwordHash TEXT NOT NULL, lastLoginAt TEXT,\n`;
+    sql += `  createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL\n);\n\n`;
 
     sql += `BEGIN TRANSACTION;\n`;
-    for (const d of discoveries) {
-      const desc = (d.description || '').replace(/'/g, "''");
-      sql += `INSERT OR REPLACE INTO discoveries (id, temporaryTag, description, serialNumber, barcode, foundLocation, foundBy, foundAt, status, rejectionReason, matchedAssetId) VALUES (\n`;
-      sql += `  '${d.id}', '${d.temporaryTag}', '${desc}', '${d.serialNumber}', '${d.barcode}', '${d.foundLocation}', '${d.foundBy}', '${d.foundAt}', '${d.status}', ${d.rejectionReason ? `'${d.rejectionReason.replace(/'/g, "''")}'` : 'NULL'}, ${d.matchedAssetId ? `'${d.matchedAssetId}'` : 'NULL'}\n`;
-      sql += `);\n`;
+    for (const u of users) {
+      sql += `INSERT OR REPLACE INTO users VALUES ('${u.id}', '${u.username}', '${(u.fullName || '').replace(/'/g, "''")}', '${u.email || ''}', '${u.role}', ${u.isActive ? 1 : 0}, '${u.passwordHash || ''}', ${u.lastLoginAt ? `'${u.lastLoginAt}'` : 'NULL'}, '${u.createdAt}', '${u.updatedAt}');\n`;
     }
-    sql += `COMMIT;\n\n`;
-
-    // Table audit_logs
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `-- Table: audit_logs\n`;
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `CREATE TABLE IF NOT EXISTS audit_logs (\n`;
-    sql += `  id TEXT PRIMARY KEY,\n`;
-    sql += `  timestamp TEXT NOT NULL,\n`;
-    sql += `  userId TEXT NOT NULL,\n`;
-    sql += `  userRole TEXT NOT NULL,\n`;
-    sql += `  action TEXT NOT NULL,\n`;
-    sql += `  entityId TEXT NOT NULL,\n`;
-    sql += `  oldValue TEXT,\n`;
-    sql += `  newValue TEXT,\n`;
-    sql += `  reason TEXT\n`;
-    sql += `);\n`;
-    sql += `CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(timestamp);\n\n`;
-
-    sql += `BEGIN TRANSACTION;\n`;
-    for (const l of auditLogs.slice(0, 50)) {
-      sql += `INSERT OR REPLACE INTO audit_logs (id, timestamp, userId, userRole, action, entityId, oldValue, newValue, reason) VALUES (\n`;
-      sql += `  '${l.id}', '${l.timestamp}', '${l.userId}', '${l.userRole}', '${l.action}', '${l.entityId}', '${(l.oldValue || '').replace(/'/g, "''")}', '${(l.newValue || '').replace(/'/g, "''")}', '${(l.reason || '').replace(/'/g, "''")}'\n`;
-      sql += `);\n`;
-    }
-    sql += `COMMIT;\n\n`;
-
-    // Table offline_mutations
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `-- Table: offline_mutations (Sync Queue)\n`;
-    sql += `-- -----------------------------------------------------\n`;
-    sql += `CREATE TABLE IF NOT EXISTS offline_mutations (\n`;
-    sql += `  id TEXT PRIMARY KEY,\n`;
-    sql += `  idempotencyKey TEXT UNIQUE NOT NULL,\n`;
-    sql += `  timestamp TEXT NOT NULL,\n`;
-    sql += `  type TEXT NOT NULL,\n`;
-    sql += `  assetId TEXT NOT NULL,\n`;
-    sql += `  assetName TEXT,\n`;
-    sql += `  payloadJson TEXT,\n`;
-    sql += `  syncStatus TEXT DEFAULT 'PENDING',\n`;
-    sql += `  retryCount INTEGER DEFAULT 0\n`;
-    sql += `);\n`;
-    sql += `CREATE INDEX IF NOT EXISTS idx_mutations_status ON offline_mutations(syncStatus);\n\n`;
-
+    sql += `COMMIT;\n`;
     return sql;
   }
 
-  // User Management Methods (BrowserIndexedDBAdapter)
+  // ═══════════════════════════════════════════════════════════
+  // USERS — CRITICAL FOR OFFLINE LOGIN
+  // ═══════════════════════════════════════════════════════════
   async getUsers(): Promise<AppUser[]> {
     await this.ensureInitialized();
     try {
@@ -920,14 +789,18 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
         req.onsuccess = () => {
           const res = req.result;
           if (!res || res.length === 0) {
-            resolve(this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS));
+            console.log('[DB] Users table empty → using INITIAL_USERS');
+            // Persist seed on first read
+            this.resetSeed().catch(() => {});
+            resolve(INITIAL_USERS);
           } else {
             resolve(res);
           }
         };
         req.onerror = () => resolve(this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS));
       });
-    } catch {
+    } catch (err) {
+      console.warn('[DB] getUsers fallback to localStorage:', err);
       return this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS);
     }
   }
@@ -940,7 +813,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
         const tx = db.transaction('users', 'readwrite');
         tx.objectStore('users').put(user);
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[DB] createUser error:', err);
+    }
     this.updateLocalStorageArray('kaf_users_v3', user);
     return user;
   }
@@ -976,7 +851,30 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
     await this.updateUser(id, { passwordHash: newPasswordHash });
   }
 
-  // Helpers for local storage
+  /**
+   * NEW: Sync users from server (upsert by id)
+   */
+  async syncUsers(users: AppUser[]): Promise<{ synced: number; errors: number }> {
+    await this.ensureInitialized();
+    let synced = 0;
+    let errors = 0;
+
+    for (const user of users) {
+      try {
+        await this.createUser(user);
+        synced++;
+      } catch (err) {
+        console.warn('[DB] syncUsers error for', user.username, ':', err);
+        errors++;
+      }
+    }
+
+    return { synced, errors };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOCAL STORAGE HELPERS
+  // ═══════════════════════════════════════════════════════════
   private getFromLocalStorage<T>(key: string, fallback: T): T {
     try {
       const saved = localStorage.getItem(key);
@@ -1007,8 +905,9 @@ class BrowserIndexedDBAdapter implements IDatabaseService {
 }
 
 /**
- * Electron IPC Database Adapter
- * Used when running inside native Windows Electron environment
+ * ═══════════════════════════════════════════════════════════════════
+ * ELECTRON IPC ADAPTER (Native SQLite via better-sqlite3)
+ * ═══════════════════════════════════════════════════════════════════
  */
 class ElectronIPCAdapter implements IDatabaseService {
   isElectron(): boolean {
@@ -1172,11 +1071,25 @@ class ElectronIPCAdapter implements IDatabaseService {
   async resetUserPassword(id: string, newPasswordHash: string): Promise<void> {
     return this.api.db.resetUserPassword(id, newPasswordHash);
   }
+
+  async syncUsers(users: AppUser[]): Promise<{ synced: number; errors: number }> {
+    // Fallback : iterate createUser if syncUsers IPC not available
+    if (this.api.db.syncUsers) {
+      return this.api.db.syncUsers(users);
+    }
+    let synced = 0, errors = 0;
+    for (const u of users) {
+      try { await this.api.db.createUser(u); synced++; }
+      catch { errors++; }
+    }
+    return { synced, errors };
+  }
 }
 
 /**
- * Universal Database Service
- * Automatically detects whether running in Electron Windows or Web Browser / PWA
+ * ═══════════════════════════════════════════════════════════════════
+ * UNIVERSAL DATABASE SERVICE
+ * ═══════════════════════════════════════════════════════════════════
  */
 class DatabaseServiceManager {
   private activeAdapter: IDatabaseService;
@@ -1190,7 +1103,6 @@ class DatabaseServiceManager {
   }
 
   get adapter(): IDatabaseService {
-    // Re-check dynamically in case Electron API loaded asynchronously
     if (typeof window !== 'undefined' && window.electronAPI && !this.activeAdapter.isElectron()) {
       this.activeAdapter = new ElectronIPCAdapter();
     }

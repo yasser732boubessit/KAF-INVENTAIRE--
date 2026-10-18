@@ -311,6 +311,8 @@ export interface ElectronAPIType {
     updateUser: (id: string, fields: any) => Promise<any>;
     setUserActiveStatus: (id: string, isActive: boolean) => Promise<void>;
     resetUserPassword: (id: string, newPasswordHash: string) => Promise<void>;
+    // ✅ NEW: Sync users from NestJS server to local SQLite
+    syncUsers: (users: any[]) => Promise<{ synced: number; errors: number }>;
   };
   system: {
     getAppInfo: () => Promise<{ appName: string; version: string; dataDir: string }>;

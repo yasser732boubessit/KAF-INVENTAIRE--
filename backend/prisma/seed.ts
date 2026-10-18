@@ -6,50 +6,89 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('--- Seeding KAF INVENTAIRE Central Database ---');
 
+  // ============================================================
   // 1. Seed Roles & Users
-  const passwordHash = await bcrypt.hash('Kaf2026!Secure', 10);
+  //    Each user gets a DIFFERENT password hash because
+  //    bcrypt generates a unique salt per hash call.
+  // ============================================================
 
   const users = [
+    // ---------- Administrateurs ----------
     {
       username: 'admin',
       fullName: 'Yasser Boubessit (Directeur d\'Exploitation)',
       email: 'admin@kaf-inventaire.dz',
       role: UserRole.ADMIN,
-      passwordHash,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
     },
+    {
+      username: 'admin.patrimoine',
+      fullName: 'Yacine Benali (Responsable Patrimoine)',
+      email: 'y.benali@kaf-inventaire.dz',
+      role: UserRole.ADMIN,
+      passwordHash: await bcrypt.hash('admin123', 10),
+    },
+
+    // ---------- Équipe 1 — Création / Desktop ----------
     {
       username: 'desktop_tech1',
       fullName: 'Opérateur Saisie Desktop (Équipe 1)',
       email: 'team1@kaf-inventaire.dz',
       role: UserRole.TEAM_1,
-      passwordHash,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
     },
+    {
+      username: 'agent.identification',
+      fullName: 'Mohamed Brahimi (Agent Identification)',
+      email: 'm.brahimi@kaf-inventaire.dz',
+      role: UserRole.TEAM_1,
+      passwordHash: await bcrypt.hash('agent123', 10),
+    },
+
+    // ---------- Équipe 2 — Vérification terrain ----------
     {
       username: 'verifier_tech2',
       fullName: 'Inspecteur Vérification Terrain (Équipe 2)',
       email: 'team2@kaf-inventaire.dz',
       role: UserRole.TEAM_2,
-      passwordHash,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
     },
+    {
+      username: 'controleur.chargement',
+      fullName: 'Amine Khelifi (Contrôleur Vérification & Chargement)',
+      email: 'a.khelifi@kaf-inventaire.dz',
+      role: UserRole.TEAM_2,
+      passwordHash: await bcrypt.hash('ctrl123', 10),
+    },
+
+    // ---------- Équipe 3 — Chargement ----------
     {
       username: 'loader_tech3',
       fullName: 'Agent Chargement & Quai (Équipe 3)',
       email: 'team3@kaf-inventaire.dz',
       role: UserRole.TEAM_3,
-      passwordHash,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
     },
   ];
 
   for (const u of users) {
     await prisma.user.upsert({
       where: { username: u.username },
-      update: {},
+      update: {
+        // If user already exists, update the fields
+        fullName: u.fullName,
+        email: u.email,
+        role: u.role,
+        passwordHash: u.passwordHash,
+      },
       create: u,
     });
   }
   console.log(`✓ Seeded ${users.length} users with standard RBAC roles`);
 
+  // ============================================================
   // 2. Seed Initial Central Assets
+  // ============================================================
   const sampleAssets = [
     {
       id: 'AST-10492',

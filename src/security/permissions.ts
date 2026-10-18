@@ -127,7 +127,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
     'settings.manage',
   ],
 
-  // RÔLE 2 — AGENT D'AJOUT / IDENTIFICATION (AGENT_INVENTAIRE)
+  // ═══════════════════════════════════════════════════════════
+  // ✅ RÔLE 2 — AGENT D'AJOUT / IDENTIFICATION (AGENT_INVENTAIRE)
+  // تم حذف: loading.view, loading.execute, verification.view, campaigns.view
+  // ═══════════════════════════════════════════════════════════
   AGENT_INVENTAIRE: [
     'assets.view',
     'assets.create',
@@ -136,13 +139,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, AppPermission[]> = {
     'assets.print_tag',
     'discoveries.view',
     'discoveries.create',
-    'zones.view',
-    'campaigns.view',
-    'sync.view',
+    'zones.view', // ضرورية لاختيار مكان الأصل
+    'sync.view',  // ضرورية للمزامنة
     'sync.execute',
-    'loading.view',
-    'loading.execute',
-    'verification.view',
   ],
 
   // RÔLE 3 — AGENT DE VÉRIFICATION / CHARGEMENT (CONTROLEUR_ZONE)
@@ -284,4 +283,3 @@ export function getRolePermissions(role?: string | null): AppPermission[] {
   const norm = normalizeRole(role);
   return ROLE_PERMISSIONS[norm] || ROLE_PERMISSIONS.AGENT_INVENTAIRE;
 }
-

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   CheckCircle2, 
@@ -13,13 +13,17 @@ import {
   HelpCircle,
   Check,
   X,
-  Printer
+  Printer,
+  ShieldCheck,
+  Loader2
 } from 'lucide-react';
-import { DiscoveredAsset, Asset, UserRole, Language } from '../types';
+import { DiscoveredAsset, Asset, UserRole, Language, InventoryZone } from '../types';
 import { translations } from '../translations';
 import { sound } from '../utils/audio';
 import { TicketPrintModal } from './TicketPrintModal';
 import { TicketData } from './PhysicalAssetTag';
+import { dbService } from '../services/databaseService';
+import { normalizeGarbledScanString, translateHardwareEventToChar } from '../utils/keyboardScannerEngine';
 
 interface UnregisteredDiscoveriesViewProps {
   discoveries: DiscoveredAsset[];
@@ -55,6 +59,13 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
   const [printModalTickets, setPrintModalTickets] = useState<TicketData[] | null>(null);
   const [autoPrintAfterCreate, setAutoPrintAfterCreate] = useState(true);
 
+  // ═══════════════════════════════════════════════════════════
+  // ✅ NOUVEAU : Zones ouvertes
+  // ═══════════════════════════════════════════════════════════
+  const [availableZones, setAvailableZones] = useState<InventoryZone[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>('');
+  const [loadingZones, setLoadingZones] = useState(false);
+
   // Helper: Convert DiscoveredAsset to TicketData
   const convertToTicket = (item: DiscoveredAsset): TicketData => ({
     tagNumber: item.temporaryTag,
@@ -74,8 +85,56 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
   const [tempBarcode, setTempBarcode] = useState('');
   const [tempLocation, setTempLocation] = useState('BAY-03-RACK-04-L1');
 
+  // ═══════════════════════════════════════════════════════════
+  // ✅ NOUVEAU : Charger les zones OUVERTES au montage
+  // ═══════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!isNewModalOpen) return;
+
+    const loadOpenZones = async () => {
+      setLoadingZones(true);
+      try {
+        const campaign = await dbService.getCampaign();
+        
+        // ✅ FILTRE : Seulement les zones OUVERTES
+        const openZones = (campaign?.zones || []).filter(z => !z.isClosed);
+        
+        console.log('[Discoveries] Zones totales:', campaign?.zones?.length || 0);
+        console.log('[Discoveries] Zones ouvertes:', openZones.length);
+        
+        setAvailableZones(openZones);
+        
+        if (openZones.length > 0 && !selectedZoneId) {
+          setSelectedZoneId(openZones[0].id);
+          setTempLocation(`${openZones[0].id}-RACK-01-L1`);
+        }
+      } catch (err) {
+        console.error('[Discoveries] Erreur chargement zones:', err);
+      } finally {
+        setLoadingZones(false);
+      }
+    };
+
+    loadOpenZones();
+  }, [isNewModalOpen]);
+
+  const handleZoneChange = (zoneId: string) => {
+    setSelectedZoneId(zoneId);
+    setTempLocation(`${zoneId}-RACK-01-L1`);
+  };
+
   const handleCreateDiscovery = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (availableZones.length === 0) {
+      alert(
+        lang === 'fr'
+          ? 'Aucune zone ouverte disponible. Ouvrez une zone dans la gestion de campagne.'
+          : 'لا توجد مناطق مفتوحة. افتح منطقة في إدارة الحملة.'
+      );
+      return;
+    }
+
     const newDec: DiscoveredAsset = {
       id: `DEC-${Math.floor(100 + Math.random() * 899)}`,
       temporaryTag: `DISCOV-2026-${Math.floor(100 + Math.random() * 899)}`,
@@ -95,6 +154,7 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
     setTempDesc('');
     setTempSerial('');
     setTempBarcode('');
+    setSelectedZoneId('');
 
     if (autoPrintAfterCreate) {
       setPrintModalTickets([convertToTicket(newDec)]);
@@ -258,7 +318,6 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                   </div>
 
                   <div className="grid grid-cols-2 gap-1.5">
-                    {/* 1. Rapprocher avec un actif manquant */}
                     <button
                       onClick={() => setSelectedForMatch(item)}
                       className="p-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 rounded text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
@@ -268,7 +327,6 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                       <span>Rapprocher</span>
                     </button>
 
-                    {/* 2. Intégrer au patrimoine */}
                     <button
                       onClick={() => onIntegrateOfficial(item.id, `IMMO-2026-${Math.floor(1000 + Math.random() * 8999)}`)}
                       className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
@@ -279,7 +337,6 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                     </button>
                   </div>
 
-                  {/* 3. Rejeter */}
                   <button
                     onClick={() => setSelectedForReject(item)}
                     className="w-full py-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded text-xs font-medium flex items-center justify-center gap-1"
@@ -290,7 +347,6 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                 </div>
               )}
 
-              {/* 🖨️ Bouton d'impression de l'étiquette physique (Balisage) */}
               <button
                 onClick={() => {
                   sound.playTap();
@@ -433,31 +489,43 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">N° de Série lu sur la plaque</label>
-                  <input
-                    type="text"
-                    value={tempSerial}
-                    onChange={(e) => setTempSerial(e.target.value)}
-                    placeholder="SN-XXX-1234"
-                    className="w-full p-2 border rounded font-mono-numbers"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Code-barres trouvé (si étiqueté)</label>
-                  <input
-                    type="text"
-                    value={tempBarcode}
-                    onChange={(e) => setTempBarcode(e.target.value)}
-                    placeholder="990184..."
-                    className="w-full p-2 border rounded font-mono-numbers"
-                  />
-                </div>
+              {/* ✅ NOUVEAU : Select des zones ouvertes */}
+              <div>
+                <label className="block font-semibold mb-1 flex items-center gap-1">
+                  Zone (Baie)
+                  {loadingZones && <Loader2 className="w-3 h-3 inline ml-1 animate-spin" />}
+                </label>
+                <select
+                  value={selectedZoneId}
+                  onChange={(e) => handleZoneChange(e.target.value)}
+                  disabled={loadingZones || availableZones.length === 0}
+                  className="w-full p-2 border rounded bg-white disabled:bg-slate-100 disabled:cursor-not-allowed font-mono-numbers"
+                >
+                  {availableZones.length === 0 ? (
+                    <option value="">
+                      {loadingZones
+                        ? 'Chargement...'
+                        : (lang === 'fr' ? '⚠️ Aucune zone ouverte' : '⚠️ لا توجد منطقة مفتوحة')}
+                    </option>
+                  ) : (
+                    availableZones.map((zone) => (
+                      <option key={zone.id} value={zone.id}>
+                        {zone.id} — {zone.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                {availableZones.length === 0 && !loadingZones && (
+                  <p className="text-[10px] text-amber-600 mt-1">
+                    {lang === 'fr'
+                      ? 'Toutes les zones sont fermées. Ouvrez-en une dans "Campagnes & Clôtures".'
+                      : 'جميع المناطق مغلقة. افتح منطقة في "الحملات والإغلاق".'}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block font-semibold mb-1">Emplacement de la découverte</label>
+                <label className="block font-semibold mb-1">Emplacement précis (Rack / Niveau)</label>
                 <input
                   type="text"
                   value={tempLocation}
@@ -465,6 +533,64 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                   placeholder="BAY-03-RACK-04-L1"
                   className="w-full p-2 border rounded font-mono-numbers"
                 />
+              </div>
+
+              {/* ✅ NOUVEAU : Série + Barcode immunisés */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                    N° de Série lu sur la plaque
+                  </label>
+                  <input
+                    type="text"
+                    value={tempSerial}
+                    onChange={(e) => {
+                      const { normalized } = normalizeGarbledScanString(e.target.value);
+                      setTempSerial(normalized);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.ctrlKey || e.altKey || e.metaKey) return;
+                      const char = translateHardwareEventToChar(e);
+                      if (char && char !== '\n' && char !== '\t' && char !== 'Backspace') {
+                        e.preventDefault();
+                        setTempSerial(prev => prev + char);
+                      }
+                    }}
+                    placeholder="SN-XXX-1234"
+                    className="w-full p-2 border rounded font-mono-numbers focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                    Code-barres trouvé (si étiqueté)
+                  </label>
+                  <input
+                    type="text"
+                    value={tempBarcode}
+                    onChange={(e) => {
+                      const { normalized } = normalizeGarbledScanString(e.target.value);
+                      setTempBarcode(normalized);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.ctrlKey || e.altKey || e.metaKey) return;
+                      const char = translateHardwareEventToChar(e);
+                      if (char && char !== '\n' && char !== '\t' && char !== 'Backspace') {
+                        e.preventDefault();
+                        setTempBarcode(prev => prev + char);
+                      }
+                    }}
+                    placeholder="990184..."
+                    className="w-full p-2 border rounded font-mono-numbers focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Badge immunisation clavier */}
+              <div className="text-[10px] text-emerald-600 flex items-center gap-1">
+                <ShieldCheck className="w-2.5 h-2.5" />
+                {lang === 'fr' ? 'Clavier Immunisé (AZERTY / AR / EN)' : 'مناعة كاملة للغة الكيبورد (AZERTY / AR / EN)'}
               </div>
 
               {/* Option to automatically open print modal */}
@@ -495,7 +621,8 @@ export const UnregisteredDiscoveriesView: React.FC<UnregisteredDiscoveriesViewPr
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-bold"
+                  disabled={availableZones.length === 0}
+                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-bold disabled:bg-slate-400 disabled:cursor-not-allowed"
                 >
                   Enregistrer la Découverte
                 </button>

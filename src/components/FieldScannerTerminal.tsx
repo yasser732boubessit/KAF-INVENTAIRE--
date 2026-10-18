@@ -349,7 +349,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               <Sliders className="w-3 h-3 text-emerald-400" />
             </button>
 
-            {/* Real Camera (Webcam) Toggle */}
+            {/* Real Camera (Webcam) Toggle *}
             <button
               onClick={() => setUseRealCamera(!useRealCamera)}
               className={`px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition-all ${
@@ -360,9 +360,9 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
             >
               {useRealCamera ? <CameraOff className="w-3.5 h-3.5" /> : <Camera className="w-3.5 h-3.5 text-sky-400" />}
               <span>{useRealCamera ? "Désactiver Caméra" : t.useWebcamToggle}</span>
-            </button>
+            </button>*/}
 
-            {/* Torch toggle */}
+            {/* Torch toggle *
             <button
               onClick={() => setTorchActive(!torchActive)}
               className={`p-1.5 rounded border transition-colors ${
@@ -373,7 +373,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               title={t.flashTorch}
             >
               <Lightbulb className="w-3.5 h-3.5" />
-            </button>
+            </button>*/}
 
             {/* Current Auditing Location Selector */}
             <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs font-mono-numbers">
@@ -491,7 +491,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               <span className="w-4 h-4 border-t-2 border-s-2 border-sky-400" />
               <span className="w-4 h-4 border-t-2 border-e-2 border-sky-400" />
             </div>
-            
+           
             <div className="self-center flex flex-col items-center gap-2">
               <div className="w-48 sm:w-64 h-24 border border-dashed border-sky-400/60 rounded flex items-center justify-center bg-sky-950/20 backdrop-blur-[1px]">
                 <div className="text-center">
@@ -504,7 +504,7 @@ export const FieldScannerTerminal: React.FC<FieldScannerTerminalProps> = ({
               <span className="text-[11px] text-slate-300 bg-black/70 px-2.5 py-0.5 rounded font-mono-numbers border border-slate-700">
                 {isAr ? 'وجه شعاع القارئ HENEX نحو باركود التيكاث' : 'VISEZ L\'ÉTIQUETTE AVEC LE SCANNER HENEX'}
               </span>
-            </div>
+            </div> {/* */}
 
             <div className="flex justify-between">
               <span className="w-4 h-4 border-b-2 border-s-2 border-sky-400" />

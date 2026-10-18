@@ -1,6 +1,8 @@
 /**
  * KAF-INVENTAIRE - Electron Windows Main Process
- * Handles application lifecycle, SQLite storage engine, and native Windows integrations.
+ * Handles app lifecycle, SQLite storage, and native integrations.
+ * 
+ * ✅ NEW: db:syncUsers handler for server → local sync
  */
 
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
@@ -45,13 +47,17 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  // Initialize SQLite local engine in user's AppData directory
+  // ═══════════════════════════════════════════════════════════
+  // Initialize SQLite engine
+  // ═══════════════════════════════════════════════════════════
   dbEngine = new LocalSQLiteEngine({
     userDataPath: app.getPath('userData'),
   });
   await dbEngine.init();
 
-  // Register Database IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // STATS & INTEGRITY
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getStats', async () => {
     return dbEngine ? dbEngine.getStats() : null;
   });
@@ -60,7 +66,9 @@ app.whenReady().then(async () => {
     return dbEngine ? dbEngine.checkIntegrity() : 'ok';
   });
 
-  // Assets IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // ASSETS
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getAssets', async () => {
     return dbEngine ? dbEngine.getAssets() : [];
   });
@@ -88,7 +96,9 @@ app.whenReady().then(async () => {
     return dbEngine.updateInventoryStatus(id, status, bayLocation, user);
   });
 
-  // Discoveries IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // DISCOVERIES
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getDiscoveries', async () => {
     return dbEngine ? dbEngine.getDiscoveries() : [];
   });
@@ -115,7 +125,9 @@ app.whenReady().then(async () => {
     return true;
   });
 
-  // Campaign & Zones IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // CAMPAIGN & ZONES
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getCampaign', async () => {
     return dbEngine ? dbEngine.getCampaign() : null;
   });
@@ -138,7 +150,9 @@ app.whenReady().then(async () => {
     return true;
   });
 
-  // Audit Logs IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // AUDIT
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getAuditLogs', async () => {
     return dbEngine ? dbEngine.getAuditLogs() : [];
   });
@@ -148,7 +162,9 @@ app.whenReady().then(async () => {
     return dbEngine.addAuditLog(entry);
   });
 
-  // Offline Mutations IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // MUTATIONS
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getMutations', async () => {
     return dbEngine ? dbEngine.getMutations() : [];
   });
@@ -168,7 +184,9 @@ app.whenReady().then(async () => {
     return true;
   });
 
-  // Conflicts IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // CONFLICTS
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getConflicts', async () => {
     return dbEngine ? dbEngine.getConflicts() : [];
   });
@@ -179,7 +197,9 @@ app.whenReady().then(async () => {
     return true;
   });
 
-  // Checklist IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // CHECKLIST
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getChecklist', async () => {
     return dbEngine ? dbEngine.getChecklist() : [];
   });
@@ -190,7 +210,9 @@ app.whenReady().then(async () => {
     return true;
   });
 
-  // Backup & Restore IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // BACKUP
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:exportBackup', async () => {
     return dbEngine ? dbEngine.exportBackup() : null;
   });
@@ -209,7 +231,9 @@ app.whenReady().then(async () => {
     return dbEngine ? dbEngine.exportSqlDump() : '';
   });
 
-  // User & Permission Management (RBAC) IPC Handlers
+  // ═══════════════════════════════════════════════════════════
+  // USERS (RBAC)
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:getUsers', async () => {
     return dbEngine ? dbEngine.getUsers() : [];
   });
@@ -236,6 +260,17 @@ app.whenReady().then(async () => {
     return true;
   });
 
+  // ═══════════════════════════════════════════════════════════
+  // ✅ NEW: SYNC USERS from server
+  // ═══════════════════════════════════════════════════════════
+  ipcMain.handle('db:syncUsers', async (_: any, users: any[]) => {
+    if (!dbEngine) throw new Error('Database engine not initialized');
+    return dbEngine.syncUsers(users);
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // SYSTEM
+  // ═══════════════════════════════════════════════════════════
   ipcMain.handle('system:getAppInfo', async () => {
     return {
       appName: 'KAF-INVENTAIRE',
@@ -255,7 +290,6 @@ app.whenReady().then(async () => {
       defaultPath: filename,
       filters: [{ name: 'CSV Document', extensions: ['csv'] }]
     });
-
     if (filePath) {
       fs.writeFileSync(filePath, content, 'utf-8');
       return true;
@@ -273,10 +307,6 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (dbEngine) {
-    dbEngine.close();
-  }
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (dbEngine) dbEngine.close();
+  if (process.platform !== 'darwin') app.quit();
 });

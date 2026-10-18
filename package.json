@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.1.10",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -19,6 +19,12 @@
   "build": {
     "appId": "com.kafinventaire.desktop",
     "productName": "KAF-INVENTAIRE",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
     "directories": {
       "output": "dist-electron"
     },
@@ -27,7 +33,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "public/icon.ico",
+      "icon": "public/favicon.ico",  
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
@@ -42,6 +48,7 @@
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -52,15 +59,17 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "concurrently": "^10.0.6",
-    "electron": "^44.8.0",
+    "electron": "^44.9.0",
     "electron-builder": "^26.15.3",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
