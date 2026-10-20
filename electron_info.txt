@@ -1,0 +1,82 @@
+﻿
+=== 1. package.json ===
+{
+  "name": "react-example",
+  "private": true,
+  "version": "2.1.10",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "tsx server.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist server.js dist-electron",
+    "lint": "tsc --noEmit",
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --external:electron --external:better-sqlite3 --external:sqlite3 --outfile=dist-electron/main.cjs && esbuild electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
+    "electron:dev": "npm run build:electron && concurrently -k \"vite --port=3000 --strictPort\" \"wait-on tcp:3000 && electron .\"",
+    "electron:build:win": "vite build && npm run build:electron && electron-builder --win --x64",
+    "electron:pack": "vite build && npm run build:electron && electron-builder --dir"
+  },
+  "main": "dist-electron/main.cjs",
+  "build": {
+    "appId": "com.kafinventaire.desktop",
+    "productName": "KAF-INVENTAIRE",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/favicon.ico",  
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KAF-INVENTAIRE"
+    }
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.1",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^10.0.6",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2",
+    "wait-on": "^9.5.1"
+  }
+}
+
+=== 2. Fichiers Main Process (BrowserWindow) ===

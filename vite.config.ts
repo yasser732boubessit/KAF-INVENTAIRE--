@@ -5,7 +5,6 @@ import path from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig(({ command }) => ({
-  // ضروري لتعمل ملفات CSS وJS عند فتح التطبيق عبر file://
   base: './',
 
   plugins: [react(), tailwindcss()],

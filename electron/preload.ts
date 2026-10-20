@@ -3,6 +3,7 @@
  * Exposes typed IPC methods via contextBridge.
  * 
  * ✅ NEW: syncUsers exposed
+ * ✅ NEW: printThermalTicket exposed
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
@@ -73,7 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setUserActiveStatus: (id: string, isActive: boolean) => ipcRenderer.invoke('db:setUserActiveStatus', id, isActive),
     resetUserPassword: (id: string, newPasswordHash: string) => ipcRenderer.invoke('db:resetUserPassword', id, newPasswordHash),
 
-    // ✅ NEW: Sync users from server
+    // Sync users
     syncUsers: (users: any[]) => ipcRenderer.invoke('db:syncUsers', users),
   },
   system: {
@@ -81,5 +82,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     printManifest: () => ipcRenderer.invoke('system:printManifest'),
     exportCsvFile: (filename: string, content: string) => ipcRenderer.invoke('system:exportCsvFile', filename, content),
     openDataFolder: () => ipcRenderer.invoke('system:openDataFolder'),
+    
+    // ✅ NEW: دالة الطباعة الحرارية
+    printThermalTicket: (widthMm: number, heightMm: number, printerName?: string) => 
+      ipcRenderer.invoke('print-thermal-ticket', { widthMm, heightMm, printerName })
   }
 });

@@ -65,7 +65,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const navItems: NavItemDef[] = [
     { id: 'cockpit', label: t.screenCockpit, icon: <LayoutDashboard className="w-4 h-4 shrink-0" />, shortcut: 'Alt+1' },
     { id: 'scanner', label: t.screenScanner, icon: <ScanLine className="w-4 h-4 shrink-0" />, shortcut: 'Alt+2' },
-    { id: 'produits_verifies', label: lang === 'ar' ? 'المعدات المؤكدة' : (t as any).screenVerifiedAssets || "Produits vérifiés", icon: <BadgeCheck className="w-4 h-4 shrink-0 text-emerald-400" />, shortcut: 'Alt+V' }, // ✅ تم التصحيح هنا
+    { id: 'produits_verifies', label: lang === 'ar' ? 'المعدات المؤكدة' : (t as any).screenVerifiedAssets || "Produits vérifiés", icon: <BadgeCheck className="w-4 h-4 shrink-0 text-emerald-400" />, shortcut: 'Alt+V' },
     { id: 'decouvertes', label: t.screenDiscoveries, icon: <PackageSearch className="w-4 h-4 shrink-0" />, badge: pendingDiscoveriesCount, badgeColor: 'yellow', shortcut: 'Alt+3' },
     { id: 'campagnes', label: t.screenCampaigns, icon: <ClipboardCheck className="w-4 h-4 shrink-0" />, shortcut: 'Alt+4' },
     { id: 'warehouse_map', label: t.screenWarehouseMap, icon: <MapPin className="w-4 h-4 shrink-0" />, shortcut: 'Alt+5' },
@@ -83,7 +83,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       return !['users', 'desktop', 'audit_logs', 'campagnes', 'produits_verifies'].includes(item.id);
     }
     if (userRole === 'CONTROLEUR_ZONE') {
-      return !['users', 'desktop'].includes(item.id);
+      // ✅ تم إضافة 'audit_logs' هنا لحجب الزر عن وكيل التحقق
+      return !['users', 'desktop', 'audit_logs'].includes(item.id);
     }
     return true;
   });

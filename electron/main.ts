@@ -3,6 +3,7 @@
  * Handles app lifecycle, SQLite storage, and native integrations.
  * 
  * ✅ NEW: db:syncUsers handler for server → local sync
+ * ✅ NEW: print-thermal-ticket handler for direct thermal printing
  */
 
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
@@ -261,7 +262,7 @@ app.whenReady().then(async () => {
   });
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ NEW: SYNC USERS from server
+  // ✅ SYNC USERS from server
   // ═══════════════════════════════════════════════════════════
   ipcMain.handle('db:syncUsers', async (_: any, users: any[]) => {
     if (!dbEngine) throw new Error('Database engine not initialized');
@@ -295,6 +296,34 @@ app.whenReady().then(async () => {
       return true;
     }
     return false;
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ NEW: THERMAL PRINTING (IPC)
+  // ═══════════════════════════════════════════════════════════
+  ipcMain.handle('print-thermal-ticket', async (event, { widthMm, heightMm, printerName }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return false;
+
+    return new Promise((resolve, reject) => {
+      win.webContents.print({
+        silent: false, // اجعلها true للطباعة الفورية بدون نافذة
+        printBackground: true,
+        deviceName: printerName || 'Xprinter XP-TT424B', // اسم الطابعة الحرارية
+        margins: { marginType: 'none' },
+        pageSize: {
+          width: widthMm * 1000,  // تحويل المليمتر إلى ميكرون
+          height: heightMm * 1000
+        }
+      }, (success, failureReason) => {
+        if (success) {
+          resolve(true);
+        } else {
+          console.error('Print failed:', failureReason);
+          reject(failureReason);
+        }
+      });
+    });
   });
 
   createWindow();

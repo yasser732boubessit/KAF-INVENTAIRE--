@@ -1,0 +1,698 @@
+﻿
+==================================================================
+ARBORESCENCE DU DOSSIER BACKEND
+==================================================================
+
+FullName                                                
+--------                                                
+D:\Inventaire\KAF-INVENTAIRE--\backend\prisma           
+D:\Inventaire\KAF-INVENTAIRE--\backend\src              
+D:\Inventaire\KAF-INVENTAIRE--\backend\prisma\migrations
+D:\Inventaire\KAF-INVENTAIRE--\backend\prisma\migrati...
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\assets       
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\audit        
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\auth         
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\common       
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\etl          
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\loading      
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\prisma       
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\sync         
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\users        
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\verification 
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\assets\dto   
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\auth\dto     
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\common\dec...
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\common\guards
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\loading\dto  
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\sync\dto     
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\users\dto    
+D:\Inventaire\KAF-INVENTAIRE--\backend\src\verificati...
+
+
+
+==================================================================
+FILE: backend\package.json
+==================================================================
+{
+  "name": "kaf-inventaire-backend",
+  "version": "1.0.0",
+  "description": "Backend Central KAF-INVENTAIRE (NestJS + PostgreSQL 16 + Prisma + Redis)",
+  "author": "KAF INVENTAIRE Engineering Team",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f backend"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.3.0",
+    "@nestjs/core": "^10.3.0",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/passport": "^10.0.3",
+    "@nestjs/platform-express": "^10.3.0",
+    "@nestjs/swagger": "^7.2.0",
+    "@nestjs/throttler": "^5.1.1",
+    "@prisma/client": "^5.8.1",
+    "argon2": "^0.31.2",
+    "bcrypt": "^5.1.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "dotenv": "^16.4.1",
+    "exceljs": "^4.4.0",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.3.2",
+    "multer": "^1.4.5-lts.1",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "pdfkit": "^0.14.0",
+    "reflect-metadata": "^0.2.1",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.3.0",
+    "@nestjs/schematics": "^10.1.0",
+    "@nestjs/testing": "^10.3.0",
+    "@types/bcrypt": "^5.0.2",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.11.5",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/pdfkit": "^0.13.4",
+    "prisma": "^5.8.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
+
+==================================================================
+FILE: backend\docker-compose.yml
+==================================================================
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kaf_postgres_16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kaf_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kaf_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-kaf_inventaire}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kaf_admin} -d ${POSTGRES_DB:-kaf_inventaire}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kaf_redis_7
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kaf_backend_nestjs
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-5000}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-kaf_admin}:${POSTGRES_PASSWORD:-kaf_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-kaf_inventaire}?schema=public"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-kaf_inventaire_secure_jwt_secret_change_in_prod}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-8h}
+      DEVICE_REGISTRATION_TOKEN: ${DEVICE_REGISTRATION_TOKEN:-kaf_dev_reg_token_9841}
+    ports:
+      - "${PORT:-5000}:${PORT:-5000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+==================================================================
+FILE: backend\.env
+==================================================================
+# ==========================================
+# KAF INVENTAIRE - Environment Configuration
+# ==========================================
+
+# Application Port
+PORT=5000
+
+# Central PostgreSQL Connection String
+DATABASE_URL="postgresql://postgres:yasser@localhost:5432/kaf_inventaire_sync"
+
+# Database Configuration (Docker Compose)
+POSTGRES_USER="kaf_admin"
+POSTGRES_PASSWORD="kaf_secure_pass_2026"
+POSTGRES_DB="kaf_inventaire"
+POSTGRES_PORT=5432
+
+# Redis Cache & Queue
+REDIS_HOST="localhost"
+REDIS_PORT=6379
+
+# Security & Authentication
+JWT_SECRET="kaf_inventaire_secure_jwt_secret_change_in_prod"
+JWT_EXPIRATION="8h"
+REFRESH_TOKEN_SECRET="kaf_inventaire_refresh_secret_key_2026"
+DEVICE_REGISTRATION_TOKEN="kaf_dev_reg_token_9841"
+
+# Client / Desktop Electron Configuration
+VITE_CENTRAL_API_URL="http://localhost:5000/api"
+VITE_DEVICE_ID="TERM-WH-01"
+VITE_DEVICE_API_KEY="dev_key_alpha_9921"
+
+==================================================================
+FILE: backend\prisma\schema.prisma
+==================================================================
+// KAF INVENTAIRE â€” Prisma 5 Schema for Central PostgreSQL 16
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// Enums
+// -------------------------------------------------------------
+
+enum UserRole {
+  TEAM_1   // Desktop Offline / Asset creation
+  TEAM_2   // Web Portal / Physical verification
+  TEAM_3   // Mobile PWA / Loading & Registry
+  ADMIN    // Super Admin / All permissions + ETL
+}
+
+enum WorkflowState {
+  AJOUTE
+  SYNCHRONISE
+  VERIFIE
+  CHARGE
+  REJETE
+}
+
+enum PhysicalState {
+  ACTIF
+  EN_PANNE
+  EN_MAINTENANCE
+  EN_STOCK
+  HORS_SERVICE
+  REFORME
+}
+
+enum InventoryStatus {
+  CONFORME
+  ECART_LOCALISATION
+  MANQUANT
+  NON_VERIFIE
+  NON_ENREGISTRE
+}
+
+enum AssetCategory {
+  Mechanical
+  Electrical
+  Automation
+  Instrumentation
+  Safety
+}
+
+// -------------------------------------------------------------
+// Models
+// -------------------------------------------------------------
+
+model User {
+  id           String        @id @default(uuid())
+  username     String        @unique
+  fullName     String
+  email        String?       @unique
+  passwordHash String
+  role         UserRole      @default(TEAM_1)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relations
+  createdAssets        Asset[]              @relation("AssetCreator")
+  verifiedRecords      VerificationRecord[] @relation("VerifierUser")
+  loadingRecords       LoadingRecord[]      @relation("LoaderUser")
+  auditLogs            AuditLog[]           @relation("UserAudits")
+
+  @@map("users")
+}
+
+model Asset {
+  id                   String          @id @default(uuid())
+  officialCode         String          @unique
+  name                 String
+  nameFr               String?
+  nameAr               String?
+  sku                  String?
+  serialNumber         String          @unique
+  barcode              String          @unique
+  rfidTag              String?         @unique
+  category             AssetCategory   @default(Mechanical)
+  zone                 String          @default("ZONE-A")
+  expectedBayLocation  String
+  scannedBayLocation   String?
+  inventoryStatus      InventoryStatus @default(NON_VERIFIE)
+  workflowState        WorkflowState   @default(AJOUTE)
+  physicalState        PhysicalState   @default(ACTIF)
+  condition            String          @default("nominal")
+  tamperSealIntact     Boolean         @default(true)
+  rfidVerified         Boolean         @default(false)
+  serialVerified       Boolean         @default(false)
+  weightKg             Float           @default(0.0)
+  notes                String?
+  notesFr              String?
+  imageUrl             String?
+  version              Int             @default(1)
+
+  // Tracking timestamps & authors
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  createdById          String?
+  createdBy            User?           @relation("AssetCreator", fields: [createdById], references: [id])
+  lastScannedAt        DateTime?
+  scannedBy            String?
+
+  syncBatchId          String?
+  syncBatch            SyncBatch?      @relation(fields: [syncBatchId], references: [id])
+
+  // Verification & Loading links
+  verificationRecords  VerificationRecord[]
+  loadingRecords       LoadingRecord[]
+  auditLogs            AuditLog[]
+
+  @@index([workflowState])
+  @@index([barcode])
+  @@index([serialNumber])
+  @@index([officialCode])
+  @@map("assets")
+}
+
+model SyncBatch {
+  id              String        @id @default(uuid())
+  deviceId        String
+  receivedAt      DateTime      @default(now())
+  clientTimestamp DateTime?
+  batchSize       Int           @default(0)
+  insertedCount   Int           @default(0)
+  updatedCount    Int           @default(0)
+  conflictCount   Int           @default(0)
+  status          String        @default("SUCCESS") // SUCCESS, PARTIAL, REJECTED
+  assets          Asset[]
+  auditLogs       AuditLog[]
+
+  @@map("sync_batches")
+}
+
+model VerificationRecord {
+  id                  String        @id @default(uuid())
+  assetId             String
+  asset               Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  verifiedByUserId    String
+  verifiedByUser      User          @relation("VerifierUser", fields: [verifiedByUserId], references: [id])
+  verifiedAt          DateTime      @default(now())
+  bayLocation         String
+  condition           String
+  tamperSealIntact    Boolean
+  rfidMatches         Boolean
+  serialMatches       Boolean
+  notes               String?
+  resultStatus        String        @default("CONFORME") // CONFORME, ECART, ANOMALIE
+
+  @@index([assetId])
+  @@map("verification_records")
+}
+
+model LoadingRecord {
+  id                  String        @id @default(uuid())
+  assetId             String
+  asset               Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  loadedByUserId      String
+  loadedByUser        User          @relation("LoaderUser", fields: [loadedByUserId], references: [id])
+  loadedAt            DateTime      @default(now())
+  destinationBay      String
+  vehiclePlate        String?
+  containerCode       String?
+  notes               String?
+
+  @@index([assetId])
+  @@map("loading_records")
+}
+
+model AuditLog {
+  id             String        @id @default(uuid())
+  action         String
+  entityType     String        @default("ASSET")
+  assetId        String?
+  asset          Asset?        @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  userId         String?
+  user           User?         @relation("UserAudits", fields: [userId], references: [id], onDelete: SetNull)
+  role           String
+  previousState  String?
+  newState       String?
+  details        String?
+  ipAddress      String?
+  userAgent      String?
+  syncBatchId    String?
+  syncBatch      SyncBatch?    @relation(fields: [syncBatchId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@index([assetId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+==================================================================
+FILE: backend\prisma\seed.ts
+==================================================================
+import { PrismaClient, UserRole, WorkflowState, PhysicalState, InventoryStatus, AssetCategory } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('--- Seeding KAF INVENTAIRE Central Database ---');
+
+  // ============================================================
+  // 1. Seed Roles & Users
+  //    Each user gets a DIFFERENT password hash because
+  //    bcrypt generates a unique salt per hash call.
+  // ============================================================
+
+  const users = [
+    // ---------- Administrateurs ----------
+    {
+      username: 'admin',
+      fullName: 'Yasser Boubessit (Directeur d\'Exploitation)',
+      email: 'admin@kaf-inventaire.dz',
+      role: UserRole.ADMIN,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
+    },
+    {
+      username: 'admin.patrimoine',
+      fullName: 'Yacine Benali (Responsable Patrimoine)',
+      email: 'y.benali@kaf-inventaire.dz',
+      role: UserRole.ADMIN,
+      passwordHash: await bcrypt.hash('admin123', 10),
+    },
+
+    // ---------- Ã‰quipe 1 â€” CrÃ©ation / Desktop ----------
+    {
+      username: 'desktop_tech1',
+      fullName: 'OpÃ©rateur Saisie Desktop (Ã‰quipe 1)',
+      email: 'team1@kaf-inventaire.dz',
+      role: UserRole.TEAM_1,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
+    },
+    {
+      username: 'agent.identification',
+      fullName: 'Mohamed Brahimi (Agent Identification)',
+      email: 'm.brahimi@kaf-inventaire.dz',
+      role: UserRole.TEAM_1,
+      passwordHash: await bcrypt.hash('agent123', 10),
+    },
+
+    // ---------- Ã‰quipe 2 â€” VÃ©rification terrain ----------
+    {
+      username: 'verifier_tech2',
+      fullName: 'Inspecteur VÃ©rification Terrain (Ã‰quipe 2)',
+      email: 'team2@kaf-inventaire.dz',
+      role: UserRole.TEAM_2,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
+    },
+    {
+      username: 'controleur.chargement',
+      fullName: 'Amine Khelifi (ContrÃ´leur VÃ©rification & Chargement)',
+      email: 'a.khelifi@kaf-inventaire.dz',
+      role: UserRole.TEAM_2,
+      passwordHash: await bcrypt.hash('ctrl123', 10),
+    },
+
+    // ---------- Ã‰quipe 3 â€” Chargement ----------
+    {
+      username: 'loader_tech3',
+      fullName: 'Agent Chargement & Quai (Ã‰quipe 3)',
+      email: 'team3@kaf-inventaire.dz',
+      role: UserRole.TEAM_3,
+      passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
+    },
+  ];
+
+  for (const u of users) {
+    await prisma.user.upsert({
+      where: { username: u.username },
+      update: {
+        // If user already exists, update the fields
+        fullName: u.fullName,
+        email: u.email,
+        role: u.role,
+        passwordHash: u.passwordHash,
+      },
+      create: u,
+    });
+  }
+  console.log(`âœ“ Seeded ${users.length} users with standard RBAC roles`);
+
+  // ============================================================
+  // 2. Seed Initial Central Assets
+  // ============================================================
+  const sampleAssets = [
+    {
+      id: 'AST-10492',
+      officialCode: 'KAF-AST-2024-001',
+      name: 'Moteur TriphasÃ© Asynchrone 45kW IE3',
+      nameFr: 'Moteur TriphasÃ© Asynchrone 45kW IE3',
+      nameAr: 'Ù…Ø­Ø±Ùƒ Ø«Ù„Ø§Ø«ÙŠ Ø§Ù„Ø£Ø·ÙˆØ§Ø± ØºÙŠØ± Ù…ØªØ²Ø§Ù…Ù† 45 ÙƒÙŠÙ„ÙˆÙˆØ§Ø· IE3',
+      sku: 'SKU-ENG-45KW-01',
+      serialNumber: 'SN-ABB-994102-DZ',
+      barcode: '6131102941028',
+      rfidTag: 'E280-1160-2000-01',
+      category: AssetCategory.Mechanical,
+      zone: 'WEST-DC-ZONE-C',
+      expectedBayLocation: 'BAY-04-RACK-02-LVL1',
+      scannedBayLocation: 'BAY-04-RACK-02-LVL1',
+      inventoryStatus: InventoryStatus.CONFORME,
+      workflowState: WorkflowState.SYNCHRONISE,
+      physicalState: PhysicalState.ACTIF,
+      condition: 'nominal',
+      tamperSealIntact: true,
+      rfidVerified: true,
+      serialVerified: true,
+      notes: 'Bobinage certifiÃ© conforme 2026',
+      imageUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&q=80&w=400',
+      weightKg: 285.5,
+      version: 1,
+    },
+    {
+      id: 'AST-10493',
+      officialCode: 'KAF-AST-2024-002',
+      name: 'Pompe Centrifuge Haute Pression KSB',
+      nameFr: 'Pompe Centrifuge Haute Pression KSB',
+      nameAr: 'Ù…Ø¶Ø®Ø© Ø·Ø±Ø¯ Ù…Ø±ÙƒØ²ÙŠ Ø¹Ø§Ù„ÙŠØ© Ø§Ù„Ø¶ØºØ· KSB',
+      sku: 'SKU-PUMP-HP-KSB-02',
+      serialNumber: 'SN-KSB-2023-4411',
+      barcode: '6131102941035',
+      rfidTag: 'E280-1160-2000-02',
+      category: AssetCategory.Mechanical,
+      zone: 'WEST-DC-ZONE-C',
+      expectedBayLocation: 'BAY-04-RACK-03-LVL2',
+      scannedBayLocation: 'BAY-08-RACK-01-LVL1',
+      inventoryStatus: InventoryStatus.ECART_LOCALISATION,
+      workflowState: WorkflowState.SYNCHRONISE,
+      physicalState: PhysicalState.ACTIF,
+      condition: 'minor_wear',
+      tamperSealIntact: true,
+      rfidVerified: true,
+      serialVerified: true,
+      notes: 'Ã‰cart de travÃ©e dÃ©tectÃ© lors du premier audit',
+      imageUrl: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&q=80&w=400',
+      weightKg: 142.0,
+      version: 1,
+    },
+    {
+      id: 'AST-10494',
+      officialCode: 'KAF-AST-2024-003',
+      name: 'Automate Programmable Industriel S7-1500',
+      nameFr: 'Automate Programmable Industriel S7-1500',
+      nameAr: 'Ù…ØªØ­ÙƒÙ… Ù…Ù†Ø·Ù‚ÙŠ Ù‚Ø§Ø¨Ù„ Ù„Ù„Ø¨Ø±Ù…Ø¬Ø© ØµÙ†Ø§Ø¹ÙŠ S7-1500',
+      sku: 'SKU-PLC-SIEMENS-1500',
+      serialNumber: 'SN-SIE-1500-8842',
+      barcode: '6131102941042',
+      rfidTag: 'E280-1160-2000-03',
+      category: AssetCategory.Automation,
+      zone: 'CENTRAL-CTRL-ROOM',
+      expectedBayLocation: 'RACK-PLC-CABINET-01',
+      scannedBayLocation: 'RACK-PLC-CABINET-01',
+      inventoryStatus: InventoryStatus.CONFORME,
+      workflowState: WorkflowState.VERIFIE,
+      physicalState: PhysicalState.ACTIF,
+      condition: 'nominal',
+      tamperSealIntact: true,
+      rfidVerified: true,
+      serialVerified: true,
+      notes: 'VÃ©rifiÃ© par Ã‰quipe 2. Firmware V2.9 mis Ã  jour.',
+      imageUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=400',
+      weightKg: 8.4,
+      version: 2,
+    },
+    {
+      id: 'AST-10495',
+      officialCode: 'KAF-AST-2024-004',
+      name: 'Variateur de FrÃ©quence Altivar ATV930 75kW',
+      nameFr: 'Variateur de FrÃ©quence Altivar ATV930 75kW',
+      nameAr: 'Ù…ØºÙŠØ± ØªØ±Ø¯Ø¯ Ø£Ù„ØªÙŠÙØ§Ø± ATV930 Ø¨Ù‚ÙˆØ© 75 ÙƒÙŠÙ„ÙˆÙˆØ§Ø·',
+      sku: 'SKU-VFD-SCH-ATV930',
+      serialNumber: 'SN-SCH-ATV930-1092',
+      barcode: '6131102941059',
+      rfidTag: 'E280-1160-2000-04',
+      category: AssetCategory.Electrical,
+      zone: 'WEST-DC-ZONE-C',
+      expectedBayLocation: 'BAY-02-CABINET-04',
+      scannedBayLocation: 'BAY-02-CABINET-04',
+      inventoryStatus: InventoryStatus.CONFORME,
+      workflowState: WorkflowState.CHARGE,
+      physicalState: PhysicalState.ACTIF,
+      condition: 'nominal',
+      tamperSealIntact: true,
+      rfidVerified: true,
+      serialVerified: true,
+      notes: 'ChargÃ© sur camion de dÃ©ploiement vers le Site Sud.',
+      imageUrl: 'https://images.unsplash.com/photo-1555664424-778a1e5e1b48?auto=format&fit=crop&q=80&w=400',
+      weightKg: 46.2,
+      version: 3,
+    }
+  ];
+
+  for (const asset of sampleAssets) {
+    await prisma.asset.upsert({
+      where: { officialCode: asset.officialCode },
+      update: {},
+      create: asset,
+    });
+  }
+  console.log(`âœ“ Seeded ${sampleAssets.length} initial industrial assets`);
+
+  console.log('--- Database Seed Completed Successfully ---');
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+
+==================================================================
+FILE: backend\src\main.ts
+==================================================================
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe, Logger } from '@nestjs/common';
+import helmet from 'helmet';
+
+async function bootstrap() {
+  const logger = new Logger('KAF_INVENTAIRE_BOOTSTRAP');
+  const app = await NestFactory.create(AppModule);
+
+  // Hardening & Security
+  app.use(helmet());
+
+  // CORS for Web Portal, Electron Desktop, and PWA Mobile
+  app.enableCors({
+    origin: '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+    allowedHeaders: 'Content-Type, Accept, Authorization, x-device-id, x-device-api-key',
+  });
+
+  // Global prefix as defined in API Documentation: /api/v1
+  app.setGlobalPrefix('api/v1');
+
+  // DTO Validation
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: false,
+    }),
+  );
+
+  const port = process.env.PORT || 5000;
+  await app.listen(port);
+  logger.log(`ðŸš€ KAF INVENTAIRE Central API is running on port: ${port}`);
+  logger.log(`ðŸ“¡ Endpoints available under http://localhost:${port}/api/v1`);
+  logger.log(`âš™ï¸  Active Database: ${process.env.DATABASE_URL?.split('@')[1] || 'PostgreSQL 16'}`);
+}
+bootstrap();
+
+==================================================================
+FILE: backend\src\app.module.ts
+==================================================================
+import { Module } from '@nestjs/common';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { AssetsModule } from './assets/assets.module';
+import { SyncModule } from './sync/sync.module';
+import { VerificationModule } from './verification/verification.module';
+import { LoadingModule } from './loading/loading.module';
+import { EtlModule } from './etl/etl.module';
+import { AuditModule } from './audit/audit.module';
+import { PrismaService } from './prisma/prisma.service';
+import { AppController } from './app.controller';
+
+@Module({
+  imports: [
+    AuthModule,
+    UsersModule,
+    AssetsModule,
+    SyncModule,
+    VerificationModule,
+    LoadingModule,
+    EtlModule,
+    AuditModule,
+  ],
+  controllers: [AppController],
+  providers: [PrismaService],
+})
+export class AppModule {}
+
