@@ -1,9 +1,10 @@
 /**
  * KAF-INVENTAIRE - Local SQLite Engine for Electron Windows
  * Compliant with offline-first industrial asset management specifications.
- *
+ * 
  * ✅ NEW: syncUsers() — sync users from NestJS server to local SQLite
  * ✅ FIXED: createUser() now uses INSERT OR REPLACE to prevent UNIQUE constraint errors
+ * ✅ UPDATED: New Zones (Plots 14, 15, 16) & New Asset Categories
  */
 
 import path from 'node:path';
@@ -215,8 +216,8 @@ export class LocalSQLiteEngine {
           {
             id: 'USR-ADMIN-01',
             username: 'admin.patrimoine',
-            fullName: 'Yacine Benali (Responsable Patrimoine)',
-            email: 'y.benali@kotama-agrifood.dz',
+            fullName: 'Yasser boubesssit (Responsable Patrimoine)',
+            email: 'y.boubesssit@kotama-agrifood.dz',
             role: 'RESPONSABLE_PATRIMOINE',
             isActive: 1,
             avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
@@ -253,7 +254,6 @@ export class LocalSQLiteEngine {
           }
         ];
 
-        // ✅ التعديل هنا: استخدام INSERT OR REPLACE لتفادي أخطاء التكرار
         const insert = this.db.prepare(`
           INSERT OR REPLACE INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
           VALUES (@id, @username, @fullName, @email, @role, @isActive, @avatarUrl, @passwordHash, @lastLoginAt, @createdAt, @updatedAt)
@@ -269,7 +269,7 @@ export class LocalSQLiteEngine {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // SEED ASSETS (only if empty)
+    // SEED ASSETS & ZONES (only if empty)
     // ═══════════════════════════════════════════════════════════
     try {
       const assetCount = this.db.prepare('SELECT COUNT(*) as count FROM assets').get().count;
@@ -279,56 +279,85 @@ export class LocalSQLiteEngine {
           VALUES ('CAMP-2026-Q1', 'Campagne Générale d''Inventaire Industriel Q1-2026', 'EN_COURS', '2026-10-01', '2026-10-15', 'Yasser B. (Auditeur Principal)', '', 75)
         `).run();
 
+        // ✅ 1. إضافة المناطق الجديدة (Plots 14, 15, 16)
         const insertZone = this.db.prepare('INSERT OR REPLACE INTO zones (id, name, aisle, isClosed, closedAt, closedBy) VALUES (?, ?, ?, ?, ?, ?)');
-        insertZone.run('BAY-01', 'Baie 01 - Allée A1', 'Aisle A1', 0, null, null);
-        insertZone.run('BAY-02', 'Baie 02 - Allée A2', 'Aisle A2', 1, '2026-10-08 07:50:00', 'MGR-CTRL-09');
-        insertZone.run('BAY-03', 'Baie 03 - Allée A3', 'Aisle A3', 0, null, null);
-        insertZone.run('BAY-04', 'Baie 04 - Allée A4', 'Aisle A4', 0, null, null);
+        
+        const newZones = [
+          ['PLOT-14-01', 'Silos de Stockage', 'PLOT 14', 0, null, null],
+          ['PLOT-14-02', 'Chargement Camion', 'PLOT 14', 0, null, null],
+          ['PLOT-14-03', 'Jetty Convoyeur', 'PLOT 14', 0, null, null],
+          ['PLOT-14-04', 'Courbe Convoyeur', 'PLOT 14', 0, null, null],
+          ['PLOT-14-05', 'Bâtiment Technique', 'PLOT 14', 0, null, null],
+          ['PLOT-15-06', 'Prénettoyage de Graines', 'PLOT 15', 0, null, null],
+          ['PLOT-15-07', 'Silos Tampons', 'PLOT 15', 0, null, null],
+          ['PLOT-15-08', 'Réservoirs Journaliers d\'Huiles Brute Dégommée', 'PLOT 15', 0, null, null],
+          ['PLOT-15-09', 'Préparation Building', 'PLOT 15', 0, null, null],
+          ['PLOT-15-10', 'Extraction Building', 'PLOT 15', 0, null, null],
+          ['PLOT-15-11', 'Bâtiment de Processus', 'PLOT 15', 0, null, null],
+          ['PLOT-15-12', 'Production de Vapeur', 'PLOT 15', 0, null, null],
+          ['PLOT-15-13', 'Traitement d\'Eau Brut', 'PLOT 15', 0, null, null],
+          ['PLOT-15-14', 'Traitement des Eaux Usées', 'PLOT 15', 0, null, null],
+          ['PLOT-15-15', 'Réservoir Quotidien d\'Huile Raffinée', 'PLOT 15', 0, null, null],
+          ['PLOT-16-16', 'Stockage de Farine et Coques', 'PLOT 16', 0, null, null],
+          ['PLOT-16-17', 'Station de Chargement Wagon', 'PLOT 16', 0, null, null],
+          ['PLOT-16-18', 'Réservoirs de Stockage Huile Brute Dégommée', 'PLOT 16', 0, null, null],
+          ['PLOT-16-19', 'Réservoirs de Stockage Huile Raffinée', 'PLOT 16', 0, null, null],
+          ['PLOT-16-20', 'Bâtiment de Conditionnement', 'PLOT 16', 0, null, null],
+          ['PLOT-16-21', 'Chargement Camion - Farine et Coque', 'PLOT 16', 0, null, null],
+          ['PLOT-16-22', 'Chargement Camion - Huile', 'PLOT 16', 0, null, null],
+          ['PLOT-16-23', 'Administration', 'PLOT 16', 0, null, null],
+          ['PLOT-16-24', 'Bâtiment Technique', 'PLOT 16', 0, null, null],
+        ];
 
+        for (const z of newZones) {
+          insertZone.run(z[0], z[1], z[2], z[3], z[4], z[5]);
+        }
+
+        // ✅ 2. إضافة الأصول الجديدة بالفئات الجديدة
         const initialAssetList = [
           {
-            id: "AST-10492", officialCode: "IMMO-2026-00492", name: "High-Pressure Hydraulic Gear Pump H2",
-            nameAr: "مضخة هيدروليكية ترسية عالية الضغط H2", nameFr: "Pompe hydraulique à engrenages haute pression H2",
-            sku: "SKU-HYD-092", serialNumber: "SN-940218-GB", barcode: "894102938102", rfidTag: "E280-1160-2000-0914",
-            category: "Mechanical", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-02-L3", scannedBayLocation: "BAY-04-RACK-02-L3",
+            id: "AST-10492", officialCode: "IMMO-2026-00492", name: "Toyota Hilux Double Cabine",
+            nameAr: "سيارة تويوتا هايلكس غمارتين", nameFr: "Toyota Hilux Double Cabine",
+            sku: "SKU-VEH-092", serialNumber: "SN-940218-GB", barcode: "894102938102", rfidTag: "E280-1160-2000-0914",
+            category: "VEHICULES LEGERS DE TOURISME", zone: "PLOT-14-02", expectedBayLocation: "PLOT-14-02-RACK-02-L3", scannedBayLocation: "PLOT-14-02-RACK-02-L3",
             inventoryStatus: "CONFORME", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
             lastScannedAt: "2026-10-08 07:14:22", scannedBy: "TECH-941", notes: "Vérification physique réussie. Emplacement conforme.",
             imageUrl: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80", weightKg: 24.5, calibrationDueDate: "2027-04-15"
           },
           {
-            id: "AST-10493", officialCode: "IMMO-2026-00493", name: "Programmable Logic Controller (PLC) S7-1500",
-            nameAr: "وحدة التحكم المنطقي المبرمجة S7-1500", nameFr: "Automate Programmable Industriel (API) S7-1500",
-            sku: "SKU-AUT-150", serialNumber: "SN-772910-DE", barcode: "894102938103", rfidTag: "E280-1160-2000-0915",
-            category: "Automation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-01-L2", scannedBayLocation: "BAY-04-RACK-01-L2",
+            id: "AST-10493", officialCode: "IMMO-2026-00493", name: "PC Industriel Siemens SIMATIC IPC547G",
+            nameAr: "حاسوب صناعي سيمنز SIMATIC IPC547G", nameFr: "PC Industriel Siemens SIMATIC IPC547G",
+            sku: "SKU-INF-150", serialNumber: "SN-772910-DE", barcode: "894102938103", rfidTag: "E280-1160-2000-0915",
+            category: "MATERIELS INFORMATIQUE", zone: "PLOT-15-11", expectedBayLocation: "PLOT-15-11-RACK-01-L2", scannedBayLocation: "PLOT-15-11-RACK-01-L2",
             inventoryStatus: "CONFORME", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
             lastScannedAt: "2026-10-08 07:22:05", scannedBy: "TECH-941", notes: "Firmware v3.1 validé.",
             imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", weightKg: 3.2, calibrationDueDate: "2027-01-20"
           },
           {
-            id: "AST-10494", officialCode: "IMMO-2026-00494", name: "Explosion-Proof Induction Motor 15kW",
-            nameAr: "محرك حثي مضاد للانفجار بقوة 15 كيلوواط", nameFr: "Moteur à induction antidéflagrant 15 kW (ATEX)",
-            sku: "SKU-ELE-412", serialNumber: "SN-318492-AT", barcode: "894102938104", rfidTag: "E280-1160-2000-0916",
-            category: "Electrical", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-02-RACK-01-L1", scannedBayLocation: "BAY-03-RACK-04-L1",
+            id: "AST-10494", officialCode: "IMMO-2026-00494", name: "Groupe Froid industriel 15kW",
+            nameAr: "مجموعة تبريد صناعية بقوة 15 كيلوواط", nameFr: "Groupe Froid industriel 15 kW",
+            sku: "SKU-CHA-412", serialNumber: "SN-318492-AT", barcode: "894102938104", rfidTag: "E280-1160-2000-0916",
+            category: "INSTALLATION CHAUD ET FROID", zone: "PLOT-15-12", expectedBayLocation: "PLOT-15-12-RACK-01-L1", scannedBayLocation: "PLOT-15-09-RACK-04-L1",
             inventoryStatus: "ECART_LOCALISATION", condition: "minor_wear", tamperSealIntact: 0, rfidVerified: 1, serialVerified: 1,
-            lastScannedAt: "2026-10-08 07:31:40", scannedBy: "TECH-941", notes: "Trouvé en Baie 03 au lieu de la Baie 02.",
+            lastScannedAt: "2026-10-08 07:31:40", scannedBy: "TECH-941", notes: "Trouvé en Plot 15-09 au lieu de 15-12.",
             imageUrl: "https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?auto=format&fit=crop&w=600&q=80", weightKg: 142.0, calibrationDueDate: "2026-11-30"
           },
           {
-            id: "AST-10495", officialCode: "IMMO-2026-00495", name: "Ultrasonic Vortex Flowmeter Flange DN80",
-            nameAr: "مقياس تدفق فوق صوتي دوامي بشفة DN80", nameFr: "Débitmètre vortex à ultrasons à brides DN80",
-            sku: "SKU-INS-833", serialNumber: "SN-994821-CH", barcode: "894102938105", rfidTag: "E280-1160-2000-0917",
-            category: "Instrumentation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-02-RACK-03-L2", scannedBayLocation: null,
+            id: "AST-10495", officialCode: "IMMO-2026-00495", name: "Bureau Direction en Bois Massif",
+            nameAr: "مكتب مدير من الخشب الصلب", nameFr: "Bureau Direction en Bois Massif",
+            sku: "SKU-MOB-833", serialNumber: "SN-994821-CH", barcode: "894102938105", rfidTag: "E280-1160-2000-0917",
+            category: "MOBILIER DE BUREAU", zone: "PLOT-16-23", expectedBayLocation: "PLOT-16-23-RACK-03-L2", scannedBayLocation: null,
             inventoryStatus: "MANQUANT", condition: "uninspected", tamperSealIntact: 0, rfidVerified: 0, serialVerified: 0,
-            lastScannedAt: null, scannedBy: null, notes: "Absent lors de la tournée d'inspection Baie 02.",
+            lastScannedAt: null, scannedBy: null, notes: "Absent lors de la tournée au Bâtiment Administration.",
             imageUrl: "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80", weightKg: 18.5, calibrationDueDate: "2026-12-15"
           },
           {
-            id: "AST-10502", officialCode: "IMMO-2026-00502", name: "Lenovo ThinkVision C24-20 Industrial Workstation Monitor",
-            nameAr: "شاشة محطة التحكم والمراقبة الصناعية Lenovo C24-20", nameFr: "Moniteur de poste de supervision Lenovo C24-20",
-            sku: "SKU-IT-C2420", serialNumber: "V5HND516", barcode: "1S62A8KAT1EUV5HND516", rfidTag: "E280-1160-2000-0924",
-            category: "Automation", zone: "WEST-DC-ZONE-C", expectedBayLocation: "BAY-04-RACK-02-L1", scannedBayLocation: null,
+            id: "AST-10502", officialCode: "IMMO-2026-00502", name: "Lot d'Outillage Électroportatif",
+            nameAr: "مجموعة أدوات كهربائية محمولة", nameFr: "Lot d'Outillage Électroportatif",
+            sku: "SKU-OUT-C2420", serialNumber: "V5HND516", barcode: "1S62A8KAT1EUV5HND516", rfidTag: "E280-1160-2000-0924",
+            category: "OUTILLAGE", zone: "PLOT-14-05", expectedBayLocation: "PLOT-14-05-RACK-02-L1", scannedBayLocation: null,
             inventoryStatus: "NON_VERIFIE", condition: "nominal", tamperSealIntact: 1, rfidVerified: 1, serialVerified: 1,
-            lastScannedAt: null, scannedBy: null, notes: "Moniteur LCD 23.8 pouces FHD.",
+            lastScannedAt: null, scannedBy: null, notes: "Perceuses, meuleuses et visseuses.",
             imageUrl: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80", weightKg: 3.01, calibrationDueDate: "2027-12-31"
           }
         ];
@@ -357,7 +386,7 @@ export class LocalSQLiteEngine {
         `);
         insertDisc.run(
           "DEC-001", "DISCOV-2026-001", "Compresseur d'air mobile à vis 7.5kW (Non répertorié)",
-          "SN-UNKNOWN-8842", "990184918201", "BAY-03-RACK-04-L1", "TECH-941", "2026-10-08 08:15:30",
+          "SN-UNKNOWN-8842", "990184918201", "PLOT-14-05-RACK-04-L1", "TECH-941", "2026-10-08 08:15:30",
           "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80",
           "EN_ATTENTE_REVUE", null
         );
@@ -404,7 +433,7 @@ export class LocalSQLiteEngine {
       totalDiscoveries: discoveries, pendingDiscoveries: discoveries,
       totalMutations: mutations, pendingMutations: mutations,
       totalAuditLogs: auditLogs,
-      totalZones: 4, closedZones: 3,
+      totalZones: 24, closedZones: 0,
       databasePath: this.dbPath,
       databaseSizeBytes: size || 1048576,
       journalMode: 'WAL (Write-Ahead Logging)',
@@ -440,7 +469,6 @@ export class LocalSQLiteEngine {
 
   public createUser(user: any): any {
     if (!this.db) return user;
-    // ✅ التعديل هنا: استخدام INSERT OR REPLACE لتحديث المستخدم إذا كان موجوداً
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO users (id, username, fullName, email, role, isActive, avatarUrl, passwordHash, lastLoginAt, createdAt, updatedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -702,8 +730,8 @@ export class LocalSQLiteEngine {
       serialNumber: disc.serialNumber || `SN-REG-${Date.now().toString().slice(-6)}`,
       barcode: disc.barcode || `89410${Math.floor(1000000 + Math.random() * 8999999)}`,
       rfidTag: `E280-DISC-${Math.floor(1000 + Math.random() * 8999)}`,
-      category: 'Mechanical',
-      zone: 'WEST-DC-ZONE-C',
+      category: 'MATERIEL DE BUREAU',
+      zone: 'PLOT-16-23',
       expectedBayLocation: disc.foundLocation,
       scannedBayLocation: disc.foundLocation,
       inventoryStatus: 'CONFORME',

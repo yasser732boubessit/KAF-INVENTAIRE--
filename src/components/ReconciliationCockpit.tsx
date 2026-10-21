@@ -171,7 +171,7 @@ export const ReconciliationCockpit: React.FC<ReconciliationCockpitProps> = ({
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1 font-mono">
               <span>{t.auditor} : <strong className="text-slate-800">Yasser B. (Auditeur Principal)</strong></span>
               <span className="text-slate-300">|</span>
-              <span>{t.zone} : <strong className="text-slate-800">WEST-DC-ZONE-C (Allée A)</strong></span>
+              <span>{t.zone} : <strong className="text-slate-800">Multi-Sites (Plots 14, 15, 16)</strong></span>
             </div>
           </div>
 
