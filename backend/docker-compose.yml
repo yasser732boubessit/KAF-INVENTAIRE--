@@ -47,13 +47,13 @@ services:
       DEVICE_REGISTRATION_TOKEN: ${DEVICE_REGISTRATION_TOKEN:-kaf_dev_reg_token_9841}
     ports:
       - "${PORT:-5000}:${PORT:-5000}"
+      - "5556:5555"  # ✅ تم إضافة منفذ Prisma Studio هنا
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
 
-  # 🆕 خدمة pgAdmin (واجهة إدارة قاعدة البيانات)
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: kaf_pgadmin

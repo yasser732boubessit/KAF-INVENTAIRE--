@@ -14,6 +14,7 @@ export type AssetCategory =
   | 'Instrumentation' 
   | 'Safety'
   | 'IT_Hardware'
+  | 'MATERIEL DE BUREAU'
   | 'Office_PC';
 
 export type EquipmentType = 

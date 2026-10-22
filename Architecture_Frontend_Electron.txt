@@ -1,0 +1,52 @@
+﻿============================================================
+  KAF-INVENTAIRE — ARCHITECTURE FRONTEND & ELECTRON
+  Date: 2026-10-22 10:24:32
+============================================================
+
+📂 FRONTEND ARCHITECTURE (src/)
+[39,1 KB]  src\App.tsx
+[1,2 KB]  src\index.css
+[0,2 KB]  src\main.tsx
+[10,9 KB]  src\mockData.ts
+[42,1 KB]  src\translations.ts
+[9,7 KB]  src\types.ts
+[22,3 KB]  src\components\AssetInspector.tsx
+[16,0 KB]  src\components\AuditReportManifest.tsx
+[8,0 KB]  src\components\AuditTrailView.tsx
+[66,3 KB]  src\components\BackendSyncCenterView.tsx
+[10,9 KB]  src\components\CampaignManagementView.tsx
+[5,1 KB]  src\components\ChecklistValidationView.tsx
+[50,5 KB]  src\components\DesktopDatabaseCenter.tsx
+[41,6 KB]  src\components\FieldScannerTerminal.tsx
+[28,5 KB]  src\components\HenexConfigModal.tsx
+[7,8 KB]  src\components\KafLogo.tsx
+[17,1 KB]  src\components\LoginScreen.tsx
+[10,0 KB]  src\components\LogoManagerModal.tsx
+[13,5 KB]  src\components\NewAssetModal.tsx
+[3,7 KB]  src\components\OfflineQueueBanner.tsx
+[13,7 KB]  src\components\OfflineQueueView.tsx
+[8,2 KB]  src\components\PhysicalAssetTag.tsx
+[34,2 KB]  src\components\ReconciliationCockpit.tsx
+[12,1 KB]  src\components\RightSidebar.tsx
+[12,2 KB]  src\components\TicketPrintModal.tsx
+[16,4 KB]  src\components\TopOperationalStrip.tsx
+[29,6 KB]  src\components\UnregisteredDiscoveriesView.tsx
+[50,2 KB]  src\components\UserManagementView.tsx
+[7,5 KB]  src\components\UserRoleIcon.tsx
+[48,2 KB]  src\components\VerifiedAssetsView.tsx
+[13,3 KB]  src\components\WarehouseMapView.tsx
+[22,8 KB]  src\security\authService.ts
+[6,4 KB]  src\security\crypto.ts
+[9,3 KB]  src\security\permissions.ts
+[13,3 KB]  src\services\centralSyncService.ts
+[45,4 KB]  src\services\databaseService.ts
+[4,4 KB]  src\utils\audio.ts
+[9,5 KB]  src\utils\keyboardScannerEngine.ts
+[12,6 KB]  src\utils\pureBarcode.tsx
+[5,1 KB]  src\utils\ticketParser.ts
+
+📂 ELECTRON ARCHITECTURE (electron/)
+[43,9 KB]  electron\database.ts
+[2,1 KB]  electron\electron-env.d.ts
+[15,0 KB]  electron\main.ts
+[4,3 KB]  electron\preload.ts

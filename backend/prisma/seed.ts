@@ -7,22 +7,37 @@ async function main() {
   console.log('--- Seeding KAF INVENTAIRE Central Database ---');
 
   // ============================================================
-  // 1. Seed Roles & Users
+  // 1. Seed Roles & Users (الحسابات الثلاثة الأساسية والمحدثة)
   // ============================================================
   const users = [
+    {
+      username: 'admin.patrimoine',
+      fullName: 'Yasser Boubessit (Responsable Patrimoine)',
+      email: 'y.boubessit@kaf-inventaire.dz',
+      role: UserRole.ADMIN, 
+      passwordHash: await bcrypt.hash('admin123', 10), // ✅ كلمة المرور محدثة
+    },
+    {
+      username: 'agent.identification',
+      fullName: 'Mohamed Brahimi (Agent Identification)',
+      email: 'm.brahimi@kaf-inventaire.dz',
+      role: UserRole.TEAM_1, 
+      passwordHash: await bcrypt.hash('agent123', 10), // ✅ كلمة المرور محدثة
+    },
+    {
+      username: 'controleur.chargement',
+      fullName: 'Amine Khelifi (Contrôleur Vérification & Chargement)',
+      email: 'a.khelifi@kaf-inventaire.dz',
+      role: UserRole.TEAM_2, 
+      passwordHash: await bcrypt.hash('ctrl123', 10), // ✅ كلمة المرور محدثة
+    },
+    // حسابات إضافية للاختبار (اختيارية)
     {
       username: 'admin',
       fullName: 'Yasser Boubessit (Directeur d\'Exploitation)',
       email: 'admin@kaf-inventaire.dz',
       role: UserRole.ADMIN,
       passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
-    },
-    {
-      username: 'admin.patrimoine',
-      fullName: 'Yasser Boubessit (Responsable Patrimoine)',
-      email: 'y.Boubessit@kaf-inventaire.dz',
-      role: UserRole.ADMIN,
-      passwordHash: await bcrypt.hash('admin123', 10),
     },
     {
       username: 'desktop_tech1',
@@ -32,25 +47,11 @@ async function main() {
       passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
     },
     {
-      username: 'agent.identification',
-      fullName: 'Mohamed Brahimi (Agent Identification)',
-      email: 'm.brahimi@kaf-inventaire.dz',
-      role: UserRole.TEAM_1,
-      passwordHash: await bcrypt.hash('agent123', 10),
-    },
-    {
       username: 'verifier_tech2',
       fullName: 'Inspecteur Vérification Terrain (Équipe 2)',
       email: 'team2@kaf-inventaire.dz',
       role: UserRole.TEAM_2,
       passwordHash: await bcrypt.hash('Kaf2026!Secure', 10),
-    },
-    {
-      username: 'controleur.chargement',
-      fullName: 'Amine Khelifi (Contrôleur Vérification & Chargement)',
-      email: 'a.khelifi@kaf-inventaire.dz',
-      role: UserRole.TEAM_2,
-      passwordHash: await bcrypt.hash('ctrl123', 10),
     },
     {
       username: 'loader_tech3',
@@ -68,7 +69,7 @@ async function main() {
         fullName: u.fullName,
         email: u.email,
         role: u.role,
-        passwordHash: u.passwordHash,
+        passwordHash: u.passwordHash, // تحديث كلمة المرور إذا كان الحساب موجوداً
       },
       create: u,
     });
@@ -76,7 +77,7 @@ async function main() {
   console.log(`✓ Seeded ${users.length} users with standard RBAC roles`);
 
   // ============================================================
-  // 2. Seed Initial Central Assets
+  // 2. Seed Initial Central Assets (الأصول الجديدة)
   // ============================================================
   const sampleAssets = [
     {
@@ -89,8 +90,8 @@ async function main() {
       serialNumber: 'SN-940218-GB',
       barcode: '894102938102',
       rfidTag: 'E280-1160-2000-0914',
-      category: 'VEHICULES LEGERS DE TOURISME', // ✅ الفئة الجديدة
-      zone: 'PLOT-14-02', // ✅ المنطقة الجديدة
+      category: 'VEHICULES LEGERS DE TOURISME',
+      zone: 'PLOT-14-02',
       expectedBayLocation: 'PLOT-14-02-RACK-02-L3',
       scannedBayLocation: 'PLOT-14-02-RACK-02-L3',
       inventoryStatus: InventoryStatus.CONFORME,
@@ -214,8 +215,8 @@ async function main() {
   for (const asset of sampleAssets) {
     await prisma.asset.upsert({
       where: { officialCode: asset.officialCode },
-      update: {},
-      create: asset as any, // استخدام any لتجنب مشاكل الـ Enum
+      update: {}, // لا نقوم بتحديث الأصول الموجودة لتجنب مسح التعديلات
+      create: asset as any, 
     });
   }
   console.log(`✓ Seeded ${sampleAssets.length} initial industrial assets`);

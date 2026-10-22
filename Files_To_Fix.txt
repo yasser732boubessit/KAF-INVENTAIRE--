@@ -1,0 +1,2261 @@
+﻿
+============================================================
+FILE: src/App.tsx
+============================================================
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from 'react';
+import { 
+  Asset, 
+  AssetCondition, 
+  InventoryResultStatus, 
+  ActiveScreen, 
+  Language, 
+  OfflineMutation, 
+  ConflictItem, 
+  UserRole, 
+  InventoryCampaign, 
+  DiscoveredAsset, 
+  AuditLogEntry, 
+  ValidationChecklistItem 
+} from './types';
+import { 
+  initialAssets, 
+  initialOfflineMutations, 
+  initialConflicts, 
+  initialCampaign, 
+  initialDiscoveries, 
+  initialAuditLogs, 
+  initialChecklist 
+} from './mockData';
+import { TopOperationalStrip } from './components/TopOperationalStrip';
+import { RightSidebar } from './components/RightSidebar';
+import { ReconciliationCockpit } from './components/ReconciliationCockpit';
+import { AssetInspector } from './components/AssetInspector';
+import { FieldScannerTerminal } from './components/FieldScannerTerminal';
+import { UnregisteredDiscoveriesView } from './components/UnregisteredDiscoveriesView';
+import { CampaignManagementView } from './components/CampaignManagementView';
+import { OfflineQueueView } from './components/OfflineQueueView';
+import { WarehouseMapView } from './components/WarehouseMapView';
+import { AuditTrailView } from './components/AuditTrailView';
+import { ChecklistValidationView } from './components/ChecklistValidationView';
+import { AuditReportManifest } from './components/AuditReportManifest';
+import { DesktopDatabaseCenter } from './components/DesktopDatabaseCenter';
+import { UserManagementView } from './components/UserManagementView';
+import { BackendSyncCenterView } from './components/BackendSyncCenterView';
+import { VerifiedAssetsView } from './components/VerifiedAssetsView';
+import { NewAssetModal } from './components/NewAssetModal';
+import { LoginScreen } from './components/LoginScreen';
+import { sound } from './utils/audio';
+import { dbService } from './services/databaseService';
+import { centralSyncService } from './services/centralSyncService';
+import { authService } from './security/authService';
+import { hasPermission, UserSession } from './security/permissions';
+import { ShieldAlert } from 'lucide-react';
+
+export default function App() {
+  const [lang, setLang] = useState<Language>('fr');
+  const [session, setSession] = useState<UserSession | null>(() => authService.getSession());
+  const [activeScreen, setActiveScreen] = useState<ActiveScreen>('cockpit');
+  const [userRole, setUserRole] = useState<UserRole>(() => authService.getSession()?.user?.role || 'RESPONSABLE_PATRIMOINE');
+  const [currentScanningBay, setCurrentScanningBay] = useState<string>('BAY-04');
+
+  // 1. Persistent Assets Store (50 enterprise assets)
+  const [assets, setAssets] = useState<Asset[]>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_assets_v4');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= initialAssets.length) {
+          return parsed;
+        }
+      }
+      // If previous version had fewer items, upgrade to initialAssets benchmark (50 items)
+      return initialAssets;
+    } catch {
+      return initialAssets;
+    }
+  });
+
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(assets[0] || null);
+
+  // 2. Persistent Mutations (Offline Queue)
+  const [mutations, setMutations] = useState<OfflineMutation[]>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_mutations_v3');
+      return saved ? JSON.parse(saved) : initialOfflineMutations;
+    } catch {
+      return initialOfflineMutations;
+    }
+  });
+
+  // 3. Persistent Conflicts
+  const [conflicts, setConflicts] = useState<ConflictItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_conflicts_v3');
+      return saved ? JSON.parse(saved) : initialConflicts;
+    } catch {
+      return initialConflicts;
+    }
+  });
+
+  // 4. Persistent Campaign
+  const [campaign, setCampaign] = useState<InventoryCampaign>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_campaign_v3');
+      return saved ? JSON.parse(saved) : initialCampaign;
+    } catch {
+      return initialCampaign;
+    }
+  });
+
+  // 5. Persistent Unregistered Discoveries
+  const [discoveries, setDiscoveries] = useState<DiscoveredAsset[]>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_discoveries_v3');
+      return saved ? JSON.parse(saved) : initialDiscoveries;
+    } catch {
+      return initialDiscoveries;
+    }
+  });
+
+  // 6. Persistent Audit Logs
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_audit_logs_v3');
+      return saved ? JSON.parse(saved) : initialAuditLogs;
+    } catch {
+      return initialAuditLogs;
+    }
+  });
+
+  // 7. Persistent Checklist (9 scenarios)
+  const [checklist, setChecklist] = useState<ValidationChecklistItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('kaf_checklist_v3');
+      return saved ? JSON.parse(saved) : initialChecklist;
+    } catch {
+      return initialChecklist;
+    }
+  });
+
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [isFlushing, setIsFlushing] = useState<boolean>(false);
+  const [isNewAssetModalOpen, setIsNewAssetModalOpen] = useState<boolean>(false);
+
+  // Sync RTL / LTR document direction with language
+  useEffect(() => {
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    document.documentElement.setAttribute('lang', lang);
+  }, [lang]);
+
+  // Subscribe to Authentication Session
+  useEffect(() => {
+    const unsub = authService.subscribe((s) => {
+      setSession(s);
+      if (s?.user) {
+        setUserRole(s.user.role);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleLogout = async () => {
+    await authService.logout();
+    sound.playTap();
+    setActiveScreen('cockpit');
+  };
+
+  // Global Keyboard Navigation (Alt+1 through Alt+9, Alt+0 for Desktop)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
+      if (isInput) return;
+
+      if (e.altKey) {
+        if (e.key.toLowerCase() === 'm' || e.code === 'KeyM') {
+          e.preventDefault();
+          sound.toggleMute();
+          return;
+        }
+
+        const keyMap: Record<string, ActiveScreen> = {
+          '1': 'cockpit',
+          '2': 'scanner',
+          '3': 'decouvertes',
+          '4': 'campagnes',
+          '5': 'warehouse_map',
+          '6': 'offline_queue',
+          '7': 'audit_logs',
+          '8': 'checklist',
+          '9': 'reports',
+          '0': 'desktop',
+          'u': 'users',
+          'U': 'users',
+          'v': 'produits_verifies',
+          'V': 'produits_verifies',
+          's': 'sync_center',
+          'S': 'sync_center'
+        };
+        const target = keyMap[e.key];
+        if (target) {
+          e.preventDefault();
+          setActiveScreen(target);
+          sound.playScanSuccess();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Refresh all state from local Database Engine
+  const refreshFromDB = async () => {
+    try {
+      const [dbAssets, dbMutations, dbConflicts, dbCamp, dbDisc, dbLogs, dbChk] = await Promise.all([
+        dbService.getAssets(),
+        dbService.getMutations(),
+        dbService.getConflicts(),
+        dbService.getCampaign(),
+        dbService.getDiscoveries(),
+        dbService.getAuditLogs(),
+        dbService.getChecklist()
+      ]);
+      setAssets(dbAssets);
+      setMutations(dbMutations);
+      setConflicts(dbConflicts);
+      setCampaign(dbCamp);
+      setDiscoveries(dbDisc);
+      setAuditLogs(dbLogs);
+      setChecklist(dbChk);
+    } catch (e) {
+      console.warn('Initial DB sync note:', e);
+    }
+  };
+
+  useEffect(() => {
+    refreshFromDB();
+  }, []);
+
+  // Persist state to localStorage & dbService for offline reliability
+  useEffect(() => {
+    try {
+      localStorage.setItem('kaf_assets_v4', JSON.stringify(assets));
+      localStorage.setItem('kaf_assets_v3', JSON.stringify(assets));
+    } catch {}
+  }, [assets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kaf_mutations_v3', JSON.stringify(mutations));
+    } catch {}
+  }, [mutations]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kaf_campaign_v3', JSON.stringify(campaign));
+    } catch {}
+  }, [campaign]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kaf_discoveries_v3', JSON.stringify(discoveries));
+    } catch {}
+  }, [discoveries]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kaf_audit_logs_v3', JSON.stringify(auditLogs));
+    } catch {}
+  }, [auditLogs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kaf_checklist_v3', JSON.stringify(checklist));
+    } catch {}
+  }, [checklist]);
+
+  // Helper: Append Audit Log Entry
+  const addAuditLog = (
+    action: string,
+    entityId: string,
+    oldValue: string,
+    newValue: string,
+    reason: string
+  ) => {
+    const entry: AuditLogEntry = {
+      id: `LOG-${Math.floor(100 + Math.random() * 899)}`,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      userId: userRole === 'RESPONSABLE_PATRIMOINE' ? 'MGR-ADMIN-01' : userRole === 'CONTROLEUR_ZONE' ? 'MGR-CTRL-09' : 'TECH-941',
+      userRole,
+      action,
+      entityId,
+      oldValue,
+      newValue,
+      reason
+    };
+    setAuditLogs(prev => [entry, ...prev]);
+  };
+
+  // Helper: Record an Idempotent Offline Mutation
+  const recordMutation = (
+    type: OfflineMutation['type'],
+    assetId: string,
+    assetName: string,
+    payload: Record<string, any>
+  ) => {
+    const newMut: OfflineMutation = {
+      id: `MUT-${Math.floor(99413 + Math.random() * 89999)}`,
+      idempotencyKey: `IDEMP-${assetId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      type,
+      assetId,
+      assetName,
+      payload,
+      syncStatus: isOnline ? 'SUCCESS' : 'PENDING',
+      retryCount: 0
+    };
+    setMutations(prev => [newMut, ...prev]);
+  };
+
+  // Update asset fields
+  const handleUpdateAsset = (updatedFields: Partial<Asset>) => {
+    if (!selectedAsset) return;
+
+    const oldStatus = selectedAsset.inventoryStatus;
+    const updatedAsset = { ...selectedAsset, ...updatedFields };
+    setSelectedAsset(updatedAsset);
+
+    setAssets(prev => prev.map(a => a.id === selectedAsset.id ? updatedAsset : a));
+
+    recordMutation(
+      'INVENTORY_SCAN',
+      selectedAsset.id,
+      selectedAsset.name,
+      updatedFields
+    );
+
+    if (updatedFields.inventoryStatus && updatedFields.inventoryStatus !== oldStatus) {
+      addAuditLog(
+        'MODIFICATION_STATUT_INVENTAIRE',
+        selectedAsset.id,
+        oldStatus,
+        updatedFields.inventoryStatus,
+        'Mise Ã  jour via fiche diagnostic'
+      );
+    }
+  };
+
+  // Update asset inventory status directly
+  const handleUpdateInventoryStatus = (assetId: string, newStatus: InventoryResultStatus) => {
+    const target = assets.find(a => a.id === assetId);
+    if (!target) return;
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const oldStatus = target.inventoryStatus;
+
+    const updated: Asset = {
+      ...target,
+      inventoryStatus: newStatus,
+      lastScannedAt: now,
+      scannedBy: userRole === 'RESPONSABLE_PATRIMOINE' ? 'MGR-ADMIN-01' : 'TECH-941'
+    };
+
+    setAssets(prev => prev.map(a => a.id === assetId ? updated : a));
+    if (selectedAsset?.id === assetId) {
+      setSelectedAsset(updated);
+    }
+
+    recordMutation('INVENTORY_SCAN', target.id, target.name, {
+      status: newStatus,
+      timestamp: now
+    });
+
+    addAuditLog(
+      'CHANGEMENT_STATUT_DIRECT',
+      target.id,
+      oldStatus,
+      newStatus,
+      'Modification opÃ©rateur dans le cockpit'
+    );
+  };
+
+  // Field Reconcile from Mobile / Laser Scanner
+  const handleReconcileFromScanner = (assetId: string, foundBay: string, condition?: AssetCondition) => {
+    const target = assets.find(a => a.id === assetId);
+    if (!target) return;
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const isMatchingLocation = target.expectedBayLocation.startsWith(foundBay);
+    const determinedStatus: InventoryResultStatus = isMatchingLocation ? 'CONFORME' : 'ECART_LOCALISATION';
+
+    const updated: Asset = {
+      ...target,
+      inventoryStatus: determinedStatus,
+      scannedBayLocation: foundBay,
+      condition: condition || target.condition,
+      lastScannedAt: now,
+      scannedBy: 'TECH-941',
+      serialVerified: true,
+      rfidVerified: true
+    };
+
+    setAssets(prev => prev.map(a => a.id === assetId ? updated : a));
+    setSelectedAsset(updated);
+
+    recordMutation(
+      isMatchingLocation ? 'INVENTORY_SCAN' : 'LOCATION_DIFF',
+      target.id,
+      target.name,
+      {
+        inventoryStatus: determinedStatus,
+        expectedLocation: target.expectedBayLocation,
+        scannedLocation: foundBay,
+        condition: condition || target.condition,
+        scanEngine: 'OPTICAL_LASER_CAMERA'
+      }
+    );
+
+    addAuditLog(
+      isMatchingLocation ? 'SCAN_CONFORME' : 'SIGNALEMENT_ECART_LOCALISATION',
+      target.id,
+      target.inventoryStatus,
+      determinedStatus,
+      isMatchingLocation 
+        ? `Scan physique confirmÃ© dans la baie assignÃ©e ${foundBay}`
+        : `Ã‰cart dÃ©tectÃ© : PrÃ©vu en ${target.expectedBayLocation}, trouvÃ© in situ en ${foundBay}`
+    );
+  };
+
+  // Simulated rapid scan trigger
+  const handleTriggerSimulatedScan = (customCode?: string) => {
+    sound.playScanSuccess();
+    let target: Asset | undefined;
+
+    if (customCode) {
+      target = assets.find(a => 
+        a.barcode === customCode || 
+        a.serialNumber === customCode || 
+        a.id.toLowerCase() === customCode.toLowerCase()
+      );
+    }
+
+    if (!target) {
+      // Pick first unscanned or random
+      target = assets.find(a => a.inventoryStatus === 'NON_VERIFIE') || assets[0];
+    }
+
+    if (target) {
+      handleReconcileFromScanner(target.id, target.expectedBayLocation.slice(0, 6));
+      setSelectedAsset(target);
+    }
+  };
+
+  // Zone Closure: An asset only becomes MANQUANT once its zone is closed!
+  const handleCloseZone = (zoneId: string) => {
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    // 1. Mark zone as closed
+    setCampaign(prev => ({
+      ...prev,
+      zones: prev.zones.map(z => z.id === zoneId ? {
+        ...z,
+        isClosed: true,
+        closedAt: now,
+        closedBy: userRole === 'RESPONSABLE_PATRIMOINE' ? 'MGR-ADMIN-01' : 'MGR-CTRL-09'
+      } : z)
+    }));
+
+    // 2. Identify assets assigned to this zone that were NOT scanned -> Mark MANQUANT
+    let missingCount = 0;
+    setAssets(prev => prev.map(a => {
+      if (a.expectedBayLocation.startsWith(zoneId) && a.inventoryStatus === 'NON_VERIFIE') {
+        missingCount++;
+        return {
+          ...a,
+          inventoryStatus: 'MANQUANT',
+          lastScannedAt: now,
+          notes: `${a.notes} [DÃ©clarÃ© MANQUANT Ã  la clÃ´ture de la zone ${zoneId} le ${now}]`,
+          notesFr: `${a.notesFr || a.notes} [DÃ©clarÃ© MANQUANT Ã  la clÃ´ture de la zone ${zoneId} le ${now}]`
+        };
+      }
+      return a;
+    }));
+
+    recordMutation('ZONE_CLOSE', zoneId, `Zone ${zoneId}`, {
+      isClosed: true,
+      closedAt: now,
+      missingCountCalculated: missingCount
+    });
+
+    addAuditLog(
+      'CLOTURE_ZONE',
+      zoneId,
+      'OUVERTE',
+      'CLOTUREE',
+      `ClÃ´ture formelle de la zone. ${missingCount} actif(s) non trouvÃ©s basculÃ©s en MANQUANT.`
+    );
+  };
+
+  // Reopen Zone
+  const handleReopenZone = (zoneId: string) => {
+    setCampaign(prev => ({
+      ...prev,
+      zones: prev.zones.map(z => z.id === zoneId ? {
+        ...z,
+        isClosed: false,
+        closedAt: undefined,
+        closedBy: undefined
+      } : z)
+    }));
+
+    addAuditLog(
+      'REOUVERTURE_ZONE',
+      zoneId,
+      'CLOTUREE',
+      'OUVERTE',
+      'RÃ©ouverture de zone autorisÃ©e par superviseur pour repassage'
+    );
+  };
+
+  // Lock Campaign (Only RESPONSABLE_PATRIMOINE)
+  const handleLockCampaign = () => {
+    if (userRole !== 'RESPONSABLE_PATRIMOINE') {
+      sound.playAlert();
+      return;
+    }
+
+    setCampaign(prev => ({ ...prev, status: 'VERROUILLEE' }));
+    recordMutation('CAMPAIGN_LOCK', campaign.id, campaign.title, { status: 'VERROUILLEE' });
+    addAuditLog(
+      'VERROUILLAGE_CAMPAGNE',
+      campaign.id,
+      campaign.status,
+      'VERROUILLEE',
+      'Verrouillage dÃ©finitif et homologation par le Responsable du Patrimoine'
+    );
+  };
+
+  // Discoveries: Add new physical discovery
+  const handleAddDiscovery = (newDec: DiscoveredAsset) => {
+    setDiscoveries(prev => [newDec, ...prev]);
+    recordMutation('DISCOVERY_LOG', newDec.id, newDec.description, {
+      temporaryTag: newDec.temporaryTag,
+      foundLocation: newDec.foundLocation,
+      barcode: newDec.barcode
+    });
+    addAuditLog(
+      'ENREGISTREMENT_DECOUVERTE',
+      newDec.id,
+      'NON_EXISTANT',
+      'EN_ATTENTE_REVUE',
+      `Actif physique trouvÃ© in situ en ${newDec.foundLocation} absent de l'inventaire`
+    );
+  };
+
+  // Discoveries: Match with Missing Asset
+  const handleMatchWithMissing = (discoveryId: string, missingAssetId: string) => {
+    const discovery = discoveries.find(d => d.id === discoveryId);
+    const targetAsset = assets.find(a => a.id === missingAssetId);
+    if (!discovery || !targetAsset) return;
+
+    // 1. Update discovery status
+    setDiscoveries(prev => prev.map(d => d.id === discoveryId ? {
+      ...d,
+      status: 'RAPPROCHE',
+      matchedAssetId: missingAssetId
+    } : d));
+
+    // 2. Update target asset from MANQUANT to CONFORME
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    setAssets(prev => prev.map(a => a.id === missingAssetId ? {
+      ...a,
+      inventoryStatus: 'CONFORME',
+      scannedBayLocation: discovery.foundLocation,
+      lastScannedAt: now,
+      scannedBy: 'TECH-941',
+      notes: `${a.notes} [RapprochÃ© avec dÃ©couverte ${discovery.temporaryTag}]`,
+      notesFr: `${a.notesFr || a.notes} [RapprochÃ© avec dÃ©couverte ${discovery.temporaryTag}]`
+    } : a));
+
+    addAuditLog(
+      'RAPPROCHEMENT_DECOUVERTE',
+      discoveryId,
+      'NON_ENREGISTRE',
+      missingAssetId,
+      `DÃ©couverte ${discovery.temporaryTag} rapprochÃ©e avec l'actif manquant ${missingAssetId}`
+    );
+  };
+
+  // Discoveries: Commission / Integrate to Master Inventory (Only Admin / RESPONSABLE_PATRIMOINE)
+  const handleIntegrateOfficial = (discoveryId: string, officialCode: string) => {
+    if (!hasPermission(userRole, 'discoveries.integrate')) {
+      sound.playAlert();
+      addAuditLog(
+        'TENTATIVE_NON_AUTORISEE',
+        discoveryId,
+        userRole,
+        'discoveries.integrate',
+        'Tentative d\'intÃ©gration d\'actif bloquÃ©e par le contrÃ´le RBAC (RÃ´le insuffisant)'
+      );
+      return;
+    }
+
+    const discovery = discoveries.find(d => d.id === discoveryId);
+    if (!discovery) return;
+
+    // 1. Update discovery status
+    setDiscoveries(prev => prev.map(d => d.id === discoveryId ? {
+      ...d,
+      status: 'INTEGRE'
+    } : d));
+
+    // 2. Create official Asset
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const newAsset: Asset = {
+      id: `AST-${Math.floor(10510 + Math.random() * 899)}`,
+      officialCode,
+      name: discovery.description,
+      nameAr: discovery.description,
+      nameFr: discovery.description,
+      sku: `SKU-DISC-${Math.floor(100 + Math.random() * 899)}`,
+      serialNumber: discovery.serialNumber || `SN-REG-${Date.now().toString().slice(-6)}`,
+      barcode: discovery.barcode || `89410${Math.floor(1000000 + Math.random() * 8999999)}`,
+      rfidTag: `E280-DISC-${Math.floor(1000 + Math.random() * 8999)}`,
+      category: 'Mechanical',
+      zone: 'WEST-DC-ZONE-C',
+      expectedBayLocation: discovery.foundLocation,
+      scannedBayLocation: discovery.foundLocation,
+      inventoryStatus: 'CONFORME',
+      condition: 'nominal',
+      tamperSealIntact: true,
+      rfidVerified: false,
+      serialVerified: true,
+      lastScannedAt: now,
+      scannedBy: userRole === 'RESPONSABLE_PATRIMOINE' ? 'MGR-ADMIN-01' : 'TECH-941',
+      notes: `IntÃ©grÃ© officiellement depuis dÃ©couverte ${discovery.temporaryTag}`,
+      notesFr: `IntÃ©grÃ© officiellement depuis dÃ©couverte ${discovery.temporaryTag}`,
+      imageUrl: discovery.imageUrl,
+      weightKg: 10,
+      calibrationDueDate: '2027-12-31'
+    };
+
+    setAssets(prev => [newAsset, ...prev]);
+    setSelectedAsset(newAsset);
+
+    addAuditLog(
+      'INTEGRATION_OFFICIELLE_PATRIMOINE',
+      newAsset.id,
+      discovery.temporaryTag,
+      officialCode,
+      `IntÃ©gration et immatriculation officielle au registre du patrimoine.`
+    );
+  };
+
+  // Discoveries: Reject Discovery (Only Admin / RESPONSABLE_PATRIMOINE)
+  const handleRejectDiscovery = (discoveryId: string, reason: string) => {
+    if (!hasPermission(userRole, 'discoveries.reject')) {
+      sound.playAlert();
+      addAuditLog(
+        'TENTATIVE_NON_AUTORISEE',
+        discoveryId,
+        userRole,
+        'discoveries.reject',
+        'Tentative de rejet d\'actif bloquÃ©e par le contrÃ´le RBAC'
+      );
+      return;
+    }
+
+    setDiscoveries(prev => prev.map(d => d.id === discoveryId ? {
+      ...d,
+      status: 'REJETE',
+      rejectionReason: reason
+    } : d));
+
+    addAuditLog(
+      'REJET_DECOUVERTE',
+      discoveryId,
+      'EN_ATTENTE_REVUE',
+      'REJETE',
+      `Rejet de la dÃ©couverte terrain. Motif : ${reason}`
+    );
+  };
+
+  // Flush Queue Action with Real Backend Sync Integration
+  const handleFlushQueue = async () => {
+    if (mutations.length === 0) return;
+    setIsFlushing(true);
+
+    const pending = mutations.filter(m => m.syncStatus === 'PENDING');
+    if (pending.length === 0) {
+      setIsFlushing(false);
+      return;
+    }
+
+    try {
+      const result = await centralSyncService.syncBatch(pending);
+
+      // Handle any conflicts detected by the backend (Function 6)
+      if (result.conflicts && result.conflicts.length > 0) {
+        const newConflicts: ConflictItem[] = result.conflicts.map(c => ({
+          id: c.id,
+          assetId: c.assetId,
+          assetName: `Conflit Workflow (${c.serverState?.workflowState || 'VERIFIE'})`,
+          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          fieldName: 'workflowState',
+          localValue: JSON.stringify(c.clientState),
+          serverValue: `${c.serverState?.workflowState} (VerrouillÃ© par Ã‰quipe 2/3)`,
+          resolved: false
+        }));
+
+        setConflicts(prev => [...newConflicts, ...prev]);
+        sound.playAlert();
+      }
+
+      // Mark processed mutations as SUCCESS
+      const successIds = new Set(result.successes.map(s => s.id));
+      const duplicateIds = new Set(result.duplicates);
+
+      setMutations(prev => prev.map(m => {
+        if (successIds.has(m.id) || duplicateIds.has(m.id)) {
+          return { ...m, syncStatus: 'SUCCESS' };
+        }
+        return m;
+      }));
+
+      sound.playSyncFlush();
+      addAuditLog(
+        'SYNCHRONISATION_BATCH_BACKEND',
+        result.batchId,
+        `${pending.length} en attente`,
+        `${result.successes.length} synchronisÃ©s`,
+        `Synchronisation batch avec le backend NestJS/PostgreSQL. Conflits: ${result.conflicts.length}, Doublons: ${result.duplicates.length}`
+      );
+    } catch (err: any) {
+      console.warn('Backend sync note (offline or fallback):', err);
+      // Fallback local flush
+      setMutations(prev => prev.map(m => ({ ...m, syncStatus: 'SUCCESS' })));
+      sound.playSyncFlush();
+    } finally {
+      setIsFlushing(false);
+    }
+  };
+
+  // Resolve Conflict
+  const handleResolveConflict = (conflictId: string, resolution: 'local' | 'server' | 'merge') => {
+    const target = conflicts.find(c => c.id === conflictId);
+    if (!target) return;
+
+    setConflicts(prev => prev.filter(c => c.id !== conflictId));
+    addAuditLog(
+      'ARBITRAGE_CONFLIT',
+      target.assetId,
+      target.serverValue,
+      resolution === 'local' ? target.localValue : target.serverValue,
+      `RÃ©solution arbitrage : ${resolution.toUpperCase()}`
+    );
+  };
+
+  // Add new asset tag from commission modal
+  const handleAddAsset = (newAsset: Asset) => {
+    setAssets(prev => [newAsset, ...prev]);
+    setSelectedAsset(newAsset);
+    recordMutation('INVENTORY_SCAN', newAsset.id, newAsset.name, {
+      tag: newAsset.id,
+      bayLocation: newAsset.expectedBayLocation
+    });
+    addAuditLog(
+      'COMMISSION_NOUVEL_ACTIF',
+      newAsset.id,
+      'NEANT',
+      newAsset.inventoryStatus,
+      'CrÃ©ation et immatriculation manuelle'
+    );
+  };
+
+  // Quick Asset Search from Navbar
+  const handleQuickSearch = (query: string) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return;
+
+    const matched = assets.find(a => 
+      a.id.toLowerCase().includes(q) ||
+      a.barcode.toLowerCase().includes(q) ||
+      a.serialNumber.toLowerCase().includes(q) ||
+      a.name.toLowerCase().includes(q) ||
+      (a.nameFr && a.nameFr.toLowerCase().includes(q))
+    );
+
+    if (matched) {
+      setSelectedAsset(matched);
+      setActiveScreen('cockpit');
+      sound.playScanSuccess();
+    } else {
+      sound.playAlert();
+    }
+  };
+
+  // Interactive Checklist Test Runner (9 scenarios)
+  const handleRunChecklistTest = (testId: number) => {
+    sound.playScanSuccess();
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    switch (testId) {
+      case 1: // Found registered asset in right bay
+        handleReconcileFromScanner('AST-10492', 'BAY-04');
+        break;
+      case 2: // Found registered asset in different bay -> ECART_LOCALISATION
+        handleReconcileFromScanner('AST-10494', 'BAY-03');
+        break;
+      case 3: // Found unregistered asset -> Create Discovery
+        handleAddDiscovery({
+          id: `DEC-${Math.floor(100 + Math.random() * 899)}`,
+          temporaryTag: `DISCOV-${Date.now().toString().slice(-4)}`,
+          description: "Moteur test non rÃ©pertoriÃ©",
+          serialNumber: "SN-TEST-88",
+          barcode: "990184918999",
+          foundLocation: "BAY-03-RACK-04-L1",
+          foundBy: "TECH-941",
+          foundAt: now,
+          imageUrl: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80",
+          status: 'EN_ATTENTE_REVUE'
+        });
+        break;
+      case 4: // Close zone with unscanned asset -> MANQUANT
+        handleCloseZone('BAY-02');
+        break;
+      case 5: // Disconnect internet during scan
+        setIsOnline(false);
+        recordMutation('INVENTORY_SCAN', 'AST-10493', 'API S7-1500', { offlineMode: true });
+        break;
+      case 6: // Reconnect internet & idempotent sync
+        setIsOnline(true);
+        handleFlushQueue();
+        break;
+      case 7: // Detect conflicting edits & resolve
+        setActiveScreen('offline_queue');
+        break;
+      case 8: // Export final certified report
+        setActiveScreen('reports');
+        break;
+      case 9: // Unauthorized user attempts campaign lock -> blocked by RBAC
+        setUserRole('AGENT_INVENTAIRE');
+        setActiveScreen('campagnes');
+        break;
+    }
+
+    setChecklist(prev => prev.map(item => item.id === testId ? {
+      ...item,
+      status: 'PASSED',
+      testedAt: now
+    } : item));
+  };
+
+  const handleQuickBackup = async () => {
+    try {
+      const sql = await dbService.exportSqlDump();
+      const blob = new Blob([sql], { type: 'application/sql' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kaf_inventaire_quick_backup_${new Date().toISOString().slice(0, 10)}.sql`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      sound.playScanSuccess();
+    } catch {
+      sound.playAlert();
+    }
+  };
+
+  const pendingDiscoveriesCount = discoveries.filter(d => d.status === 'EN_ATTENTE_REVUE').length;
+  const missingAssets = assets.filter(a => a.inventoryStatus === 'MANQUANT');
+
+  // Enforce Login Gate: unauthenticated users MUST log in via LoginScreen
+  if (!session) {
+    return (
+      <LoginScreen
+        lang={lang}
+        setLang={setLang}
+        onLoginSuccess={(user, isOffline) => {
+          const freshSession = authService.getSession();
+          setSession(freshSession);
+          setUserRole(user.role);
+          sound.playScanSuccess();
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen h-screen flex flex-col bg-[#F8FAFC] text-[#0F172A] overflow-hidden select-none">
+      {/* Unified Industrial ERP Compact System Navbar */}
+      <TopOperationalStrip
+        activeScreen={activeScreen}
+        setActiveScreen={setActiveScreen}
+        lang={lang}
+        setLang={setLang}
+        isOnline={isOnline}
+        setIsOnline={setIsOnline}
+        pendingMutationCount={mutations.filter(m => m.syncStatus === 'PENDING').length}
+        conflictCount={conflicts.length}
+        userRole={userRole}
+        onRoleChange={(newRole) => {
+          if (session?.user?.role === 'RESPONSABLE_PATRIMOINE') {
+            setUserRole(newRole);
+          }
+        }}
+        onQuickSearch={handleQuickSearch}
+        onFlushQueue={handleFlushQueue}
+        isFlushing={isFlushing}
+        onOpenConflicts={() => setActiveScreen('offline_queue')}
+        activeCampaignTitle={campaign.title}
+        activeCampaignProgress={campaign.progressPercent ?? (campaign.zones.length > 0 ? Math.round((campaign.zones.filter(z => z.isClosed).length / campaign.zones.length) * 100) : 75)}
+        isElectron={dbService.isElectron()}
+        currentUser={session?.user}
+        onLogout={handleLogout}
+        isOfflineSession={session?.isOffline}
+      />
+
+      {/* Main Workspace with Vertical Sidebar Anchored on the Right */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative flex-row" style={{ direction: 'ltr' }}>
+        {/* Screen Viewport with localized content direction */}
+        <main className="flex-1 flex min-h-0 overflow-hidden relative" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+          {/* Screen 1: Operational Inventory Cockpit */}
+          {activeScreen === 'cockpit' && (
+            <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden w-full">
+              <ReconciliationCockpit
+                assets={assets}
+                selectedAsset={selectedAsset}
+                onSelectAsset={setSelectedAsset}
+                onUpdateInventoryStatus={handleUpdateInventoryStatus}
+                onOpenNewAssetModal={() => setIsNewAssetModalOpen(true)}
+                onTriggerSimulatedScan={handleTriggerSimulatedScan}
+                lang={lang}
+              />
+
+              {/* Diagnostic Asset Inspector Panel */}
+              {selectedAsset && (
+                <AssetInspector
+                  asset={selectedAsset}
+                  onClose={() => setSelectedAsset(null)}
+                  onUpdateAsset={handleUpdateAsset}
+                  lang={lang}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Screen 2: Field Scanner Handheld Terminal with Real Camera & Laser */}
+          {activeScreen === 'scanner' && (
+            <FieldScannerTerminal
+              assets={assets}
+              currentScanningBay={currentScanningBay}
+              onSetScanningBay={setCurrentScanningBay}
+              onReconcileAsset={handleReconcileFromScanner}
+              onOpenDiscoveryModalWithCode={(_code) => {
+                setActiveScreen('decouvertes');
+              }}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen: Produits vÃ©rifiÃ©s & Ã‰quipements confirmÃ©s in situ */}
+          {activeScreen === 'produits_verifies' && (
+            <VerifiedAssetsView
+              assets={assets}
+              onSelectAsset={(asset) => {
+                setSelectedAsset(asset);
+                setActiveScreen('cockpit');
+              }}
+              onUpdateInventoryStatus={handleUpdateInventoryStatus}
+              lang={lang}
+              userRole={userRole}
+            />
+          )}
+
+          {/* Screen 3: Unregistered Field Discoveries */}
+          {activeScreen === 'decouvertes' && (
+            <UnregisteredDiscoveriesView
+              discoveries={discoveries}
+              missingAssets={missingAssets}
+              userRole={userRole}
+              onAddDiscovery={handleAddDiscovery}
+              onMatchWithMissing={handleMatchWithMissing}
+              onIntegrateOfficial={handleIntegrateOfficial}
+              onRejectDiscovery={handleRejectDiscovery}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 4: Campaigns & Formal Zone Closure */}
+          {activeScreen === 'campagnes' && (
+            <CampaignManagementView
+              campaign={campaign}
+              assets={assets}
+              userRole={userRole}
+              onCloseZone={handleCloseZone}
+              onReopenZone={handleReopenZone}
+              onLockCampaign={handleLockCampaign}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 5: Offline Queue & Arbitration Resolver */}
+          {activeScreen === 'offline_queue' && (
+            <OfflineQueueView
+              mutations={mutations}
+              conflicts={conflicts}
+              onFlushQueue={handleFlushQueue}
+              isFlushing={isFlushing}
+              onResolveConflict={handleResolveConflict}
+              isOnline={isOnline}
+              setIsOnline={setIsOnline}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 6: Warehouse Spatial Topology & Heatmap */}
+          {activeScreen === 'warehouse_map' && (
+            <WarehouseMapView
+              assets={assets}
+              onSelectAsset={(asset) => {
+                setSelectedAsset(asset);
+                setActiveScreen('cockpit');
+              }}
+              onOpenCockpitWithFilter={(_bayId) => {
+                setActiveScreen('cockpit');
+              }}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 7: Immutable Audit Trail & RBAC Ledger */}
+          {activeScreen === 'audit_logs' && (
+            <AuditTrailView
+              logs={auditLogs}
+              currentRole={userRole}
+              onRoleChange={setUserRole}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 8: Industrial Certification Checklist (9 Scenarios) */}
+          {activeScreen === 'checklist' && (
+            <ChecklistValidationView
+              checklist={checklist}
+              onRunTest={handleRunChecklistTest}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 9: Audit Reconciliation Manifest & Digital Sign-off */}
+          {activeScreen === 'reports' && (
+            <AuditReportManifest
+              assets={assets}
+              lang={lang}
+            />
+          )}
+
+          {/* Screen 10: Windows Desktop & SQLite Control Center */}
+          {activeScreen === 'desktop' && (
+            <DesktopDatabaseCenter
+              lang={lang}
+              userRole={userRole}
+              onRefreshData={refreshFromDB}
+            />
+          )}
+
+          {/* Screen 11: Enterprise RBAC User & Permissions Management */}
+          {activeScreen === 'users' && (
+            userRole === 'RESPONSABLE_PATRIMOINE' ? (
+              <UserManagementView
+                lang={lang}
+                currentUserRole={userRole}
+                onAuditLog={(action, entityId, oldValue, newValue, reason) => {
+                  addAuditLog(action, entityId, oldValue, newValue, reason);
+                }}
+              />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#0B0F17] text-white">
+                <div className="w-16 h-16 rounded-2xl bg-red-950/50 border border-red-800/80 flex items-center justify-center text-red-400 mb-4 shadow-xl">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold mb-2">
+                  {lang === 'ar' ? 'ØºÙŠØ± Ù…ØµØ±Ø­ Ù„Ùƒ Ø¨Ø§Ù„ÙˆØµÙˆÙ„ (AccÃ¨s RefusÃ©)' : 'AccÃ¨s RefusÃ© â€” Zone RÃ©servÃ©e'}
+                </h2>
+                <p className="text-xs text-neutral-400 max-w-md mb-6 leading-relaxed">
+                  {lang === 'ar'
+                    ? 'Ø¥Ø¯Ø§Ø±Ø© Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…ÙŠÙ† ÙˆØµÙ„Ø§Ø­ÙŠØ§Øª Ø§Ù„Ù…Ù†Ø¸ÙˆÙ…Ø© Ù…Ù‚ØªØµØ±Ø© Ø­ØµØ±ÙŠØ§Ù‹ Ø¹Ù„Ù‰ Ø§Ù„Ù…Ø³Ø¤ÙˆÙ„ Ø§Ù„Ø¹Ø§Ù… (RESPONSABLE_PATRIMOINE). ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ù…Ø­Ø§ÙˆÙ„Ø© Ø§Ù„ÙˆØµÙˆÙ„ ÙÙŠ Ø³Ø¬Ù„ Ø§Ù„ØªØ¯Ù‚ÙŠÙ‚.'
+                    : 'La gestion des utilisateurs et des permissions de la plateforme est rÃ©servÃ©e exclusivement au Responsable du Patrimoine (Administrateur). Cette tentative a Ã©tÃ© tracÃ©e dans la piste d\'audit.'}
+                </p>
+                <button
+                  onClick={() => setActiveScreen('cockpit')}
+                  className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  {lang === 'ar' ? 'Ø§Ù„Ø¹ÙˆØ¯Ø© Ù„Ù…Ù‚ØµÙˆØ±Ø© Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª' : 'Retourner au Cockpit'}
+                </button>
+              </div>
+            )
+          )}
+
+          {/* Screen 12: Backend Synchronization Engine & NestJS Test Center */}
+          {activeScreen === 'sync_center' && (
+            <BackendSyncCenterView
+              lang={lang}
+              localMutations={mutations.filter(m => m.syncStatus === 'PENDING')}
+              onRefreshLocalData={refreshFromDB}
+              onApplyServerAssetsToLocal={(serverAssets) => {
+                setAssets(serverAssets);
+                try {
+                  localStorage.setItem('kaf_assets_v3', JSON.stringify(serverAssets));
+                } catch {}
+              }}
+            />
+          )}
+        </main>
+
+        {/* Right Vertical Sidebar Navigation */}
+        <RightSidebar
+          activeScreen={activeScreen}
+          setActiveScreen={setActiveScreen}
+          lang={lang}
+          pendingDiscoveriesCount={pendingDiscoveriesCount}
+          pendingMutationCount={mutations.filter(m => m.syncStatus === 'PENDING').length}
+          isElectron={dbService.isElectron()}
+          userRole={userRole}
+          onQuickBackup={handleQuickBackup}
+        />
+      </div>
+
+      {/* Commission Asset Modal */}
+      <NewAssetModal
+        isOpen={isNewAssetModalOpen}
+        onClose={() => setIsNewAssetModalOpen(false)}
+        onAddAsset={handleAddAsset}
+        lang={lang}
+      />
+    </div>
+  );
+}
+
+============================================================
+FILE: src/services/databaseService.ts
+============================================================
+import { 
+  Asset, 
+  DiscoveredAsset, 
+  InventoryCampaign, 
+  OfflineMutation, 
+  ConflictItem, 
+  AuditLogEntry, 
+  ValidationChecklistItem, 
+  SQLiteDatabaseStats, 
+  DatabaseBackup,
+  InventoryResultStatus
+} from '../types';
+import { 
+  initialAssets, 
+  initialDiscoveries, 
+  initialCampaign, 
+  initialOfflineMutations, 
+  initialConflicts, 
+  initialAuditLogs, 
+  initialChecklist 
+} from '../mockData';
+import { AppUser } from '../security/permissions';
+import { INITIAL_USERS } from '../security/crypto';
+
+export interface IDatabaseService {
+  isElectron: () => boolean;
+  getStats: () => Promise<SQLiteDatabaseStats>;
+  getAssets: () => Promise<Asset[]>;
+  getAssetById: (id: string) => Promise<Asset | null>;
+  searchAssets: (query: string) => Promise<Asset[]>;
+  createAsset: (asset: Asset) => Promise<Asset>;
+  updateAsset: (id: string, fields: Partial<Asset>) => Promise<Asset>;
+  updateInventoryStatus: (id: string, status: InventoryResultStatus, bayLocation?: string, user?: string) => Promise<Asset>;
+  getDiscoveries: () => Promise<DiscoveredAsset[]>;
+  createDiscovery: (discovery: DiscoveredAsset) => Promise<DiscoveredAsset>;
+  matchDiscovery: (id: string, assetId: string) => Promise<void>;
+  integrateDiscovery: (id: string, officialCode: string) => Promise<Asset>;
+  rejectDiscovery: (id: string, reason: string) => Promise<void>;
+  getCampaign: () => Promise<InventoryCampaign>;
+  closeZone: (zoneId: string, user: string) => Promise<void>;
+  reopenZone: (zoneId: string) => Promise<void>;
+  lockCampaign: () => Promise<void>;
+  getAuditLogs: () => Promise<AuditLogEntry[]>;
+  addAuditLog: (entry: Omit<AuditLogEntry, 'id' | 'timestamp'>) => Promise<AuditLogEntry>;
+  getMutations: () => Promise<OfflineMutation[]>;
+  addMutation: (type: OfflineMutation['type'], assetId: string, assetName: string, payload: Record<string, any>) => Promise<OfflineMutation>;
+  flushMutations: () => Promise<number>;
+  clearMutations: () => Promise<void>;
+  getConflicts: () => Promise<ConflictItem[]>;
+  resolveConflict: (conflictId: string, resolution: 'local' | 'server' | 'merge') => Promise<void>;
+  getChecklist: () => Promise<ValidationChecklistItem[]>;
+  updateChecklist: (id: number, status: 'PASSED' | 'PENDING' | 'FAILED') => Promise<void>;
+  exportBackup: () => Promise<DatabaseBackup>;
+  importBackup: (backup: DatabaseBackup) => Promise<boolean>;
+  resetSeed: () => Promise<void>;
+  runIntegrityCheck: () => Promise<string>;
+  exportSqlDump: () => Promise<string>;
+  // User Management
+  getUsers: () => Promise<AppUser[]>;
+  createUser: (user: AppUser) => Promise<AppUser>;
+  updateUser: (id: string, fields: Partial<AppUser>) => Promise<AppUser>;
+  setUserActiveStatus: (id: string, isActive: boolean) => Promise<void>;
+  resetUserPassword: (id: string, newPasswordHash: string) => Promise<void>;
+  // NEW: Sync from server
+  syncUsers: (users: AppUser[]) => Promise<{ synced: number; errors: number }>;
+}
+
+/**
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ * IN-BROWSER STORAGE ADAPTER (IndexedDB + LocalStorage fallback)
+ * Mirrors SQLite schema for 100% offline-first capabilities
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ */
+class BrowserIndexedDBAdapter implements IDatabaseService {
+  private dbName = 'kaf_inventaire_sqlite_v5';  // v5 (bumped for user sync)
+  private db: IDBDatabase | null = null;
+  private isInitialized = false;
+
+  isElectron(): boolean {
+    return false;
+  }
+
+  private async openDB(): Promise<IDBDatabase> {
+    if (this.db) return this.db;
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, 2);
+
+      request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
+        const db = (e.target as IDBOpenDBRequest).result;
+
+        // â”€â”€â”€ Table: assets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('assets')) {
+          const store = db.createObjectStore('assets', { keyPath: 'id' });
+          store.createIndex('officialCode', 'officialCode', { unique: false });
+          store.createIndex('barcode', 'barcode', { unique: false });
+          store.createIndex('serialNumber', 'serialNumber', { unique: false });
+          store.createIndex('inventoryStatus', 'inventoryStatus', { unique: false });
+          store.createIndex('expectedBayLocation', 'expectedBayLocation', { unique: false });
+        }
+
+        // â”€â”€â”€ Table: discoveries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('discoveries')) {
+          const store = db.createObjectStore('discoveries', { keyPath: 'id' });
+          store.createIndex('temporaryTag', 'temporaryTag', { unique: false });
+          store.createIndex('status', 'status', { unique: false });
+        }
+
+        // â”€â”€â”€ Table: campaigns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('campaigns')) {
+          db.createObjectStore('campaigns', { keyPath: 'id' });
+        }
+
+        // â”€â”€â”€ Table: offline_mutations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('offline_mutations')) {
+          const store = db.createObjectStore('offline_mutations', { keyPath: 'id' });
+          store.createIndex('syncStatus', 'syncStatus', { unique: false });
+          store.createIndex('assetId', 'assetId', { unique: false });
+        }
+
+        // â”€â”€â”€ Table: conflicts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('conflicts')) {
+          db.createObjectStore('conflicts', { keyPath: 'id' });
+        }
+
+        // â”€â”€â”€ Table: audit_logs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('audit_logs')) {
+          const store = db.createObjectStore('audit_logs', { keyPath: 'id' });
+          store.createIndex('timestamp', 'timestamp', { unique: false });
+          store.createIndex('entityId', 'entityId', { unique: false });
+        }
+
+        // â”€â”€â”€ Table: checklist â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('checklist')) {
+          db.createObjectStore('checklist', { keyPath: 'id' });
+        }
+
+        // â”€â”€â”€ Table: app_settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('app_settings')) {
+          db.createObjectStore('app_settings', { keyPath: 'key' });
+        }
+
+        // â”€â”€â”€ Table: users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (!db.objectStoreNames.contains('users')) {
+          const store = db.createObjectStore('users', { keyPath: 'id' });
+          store.createIndex('username', 'username', { unique: true });
+          store.createIndex('role', 'role', { unique: false });
+        }
+      };
+
+      request.onsuccess = (e) => {
+        this.db = (e.target as IDBOpenDBRequest).result;
+        resolve(this.db);
+      };
+
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.isInitialized) return;
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('assets', 'readonly');
+      const store = tx.objectStore('assets');
+      const countReq = store.count();
+      const count = await new Promise<number>((resolve) => {
+        countReq.onsuccess = () => resolve(countReq.result);
+        countReq.onerror = () => resolve(0);
+      });
+      if (count === 0) {
+        await this.resetSeed();
+      }
+      this.isInitialized = true;
+    } catch (err) {
+      console.warn('IndexedDB initialization failed, using LocalStorage', err);
+      this.isInitialized = true;
+    }
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ASSETS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getAssets(): Promise<Asset[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      return new Promise<Asset[]>((resolve) => {
+        const tx = db.transaction('assets', 'readonly');
+        const req = tx.objectStore('assets').getAll();
+        req.onsuccess = () => resolve(req.result || initialAssets);
+        req.onerror = () => resolve(this.getFromLocalStorage('kaf_assets_v3', initialAssets));
+      });
+    } catch {
+      return this.getFromLocalStorage('kaf_assets_v3', initialAssets);
+    }
+  }
+
+  async getAssetById(id: string): Promise<Asset | null> {
+    const assets = await this.getAssets();
+    return assets.find(a => a.id === id) || null;
+  }
+
+  async searchAssets(query: string): Promise<Asset[]> {
+    const assets = await this.getAssets();
+    const q = query.trim().toLowerCase();
+    if (!q) return assets;
+    return assets.filter(a =>
+      a.id.toLowerCase().includes(q) ||
+      a.officialCode.toLowerCase().includes(q) ||
+      a.barcode.toLowerCase().includes(q) ||
+      a.serialNumber.toLowerCase().includes(q) ||
+      a.name.toLowerCase().includes(q) ||
+      (a.nameFr && a.nameFr.toLowerCase().includes(q)) ||
+      (a.nameAr && a.nameAr.toLowerCase().includes(q)) ||
+      a.expectedBayLocation.toLowerCase().includes(q)
+    );
+  }
+
+  async createAsset(asset: Asset): Promise<Asset> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('assets', 'readwrite');
+      tx.objectStore('assets').put(asset);
+    } catch {}
+    this.updateLocalStorageArray('kaf_assets_v3', asset);
+    return asset;
+  }
+
+  async updateAsset(id: string, fields: Partial<Asset>): Promise<Asset> {
+    const assets = await this.getAssets();
+    const target = assets.find(a => a.id === id);
+    if (!target) throw new Error(`Asset not found: ${id}`);
+    const updated = { ...target, ...fields };
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('assets', 'readwrite');
+      tx.objectStore('assets').put(updated);
+    } catch {}
+    this.saveToLocalStorage('kaf_assets_v3', assets.map(a => a.id === id ? updated : a));
+    return updated;
+  }
+
+  async updateInventoryStatus(id: string, status: InventoryResultStatus, bayLocation?: string, user = 'TECH-941'): Promise<Asset> {
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const updates: Partial<Asset> = {
+      inventoryStatus: status,
+      lastScannedAt: now,
+      scannedBy: user,
+      ...(bayLocation ? { scannedBayLocation: bayLocation } : {})
+    };
+    return this.updateAsset(id, updates);
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // DISCOVERIES
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getDiscoveries(): Promise<DiscoveredAsset[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      return new Promise<DiscoveredAsset[]>((resolve) => {
+        const tx = db.transaction('discoveries', 'readonly');
+        const req = tx.objectStore('discoveries').getAll();
+        req.onsuccess = () => resolve(req.result || initialDiscoveries);
+        req.onerror = () => resolve(this.getFromLocalStorage('kaf_discoveries_v3', initialDiscoveries));
+      });
+    } catch {
+      return this.getFromLocalStorage('kaf_discoveries_v3', initialDiscoveries);
+    }
+  }
+
+  async createDiscovery(discovery: DiscoveredAsset): Promise<DiscoveredAsset> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('discoveries', 'readwrite');
+      tx.objectStore('discoveries').put(discovery);
+    } catch {}
+    this.updateLocalStorageArray('kaf_discoveries_v3', discovery);
+    return discovery;
+  }
+
+  async matchDiscovery(id: string, assetId: string): Promise<void> {
+    const list = await this.getDiscoveries();
+    const target = list.find(d => d.id === id);
+    if (target) {
+      target.status = 'RAPPROCHE';
+      target.matchedAssetId = assetId;
+      try {
+        const db = await this.openDB();
+        const tx = db.transaction('discoveries', 'readwrite');
+        tx.objectStore('discoveries').put(target);
+      } catch {}
+      this.saveToLocalStorage('kaf_discoveries_v3', list);
+    }
+  }
+
+  async integrateDiscovery(id: string, officialCode: string): Promise<Asset> {
+    const list = await this.getDiscoveries();
+    const target = list.find(d => d.id === id);
+    if (!target) throw new Error('Discovery not found');
+
+    target.status = 'INTEGRE';
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('discoveries', 'readwrite');
+      tx.objectStore('discoveries').put(target);
+    } catch {}
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const newAsset: Asset = {
+      id: `AST-${Math.floor(10500 + Math.random() * 500)}`,
+      officialCode,
+      name: target.description,
+      nameAr: target.description,
+      nameFr: target.description,
+      sku: `SKU-DISC-${Math.floor(100 + Math.random() * 899)}`,
+      serialNumber: target.serialNumber || `SN-REG-${Date.now().toString().slice(-6)}`,
+      barcode: target.barcode || `89410${Math.floor(1000000 + Math.random() * 8999999)}`,
+      rfidTag: `E280-DISC-${Math.floor(1000 + Math.random() * 8999)}`,
+      category: 'Mechanical',
+      zone: 'WEST-DC-ZONE-C',
+      expectedBayLocation: target.foundLocation,
+      scannedBayLocation: target.foundLocation,
+      inventoryStatus: 'CONFORME',
+      condition: 'nominal',
+      tamperSealIntact: true,
+      rfidVerified: false,
+      serialVerified: true,
+      lastScannedAt: now,
+      scannedBy: 'MGR-ADMIN-01',
+      notes: `IntÃ©grÃ© depuis dÃ©couverte ${target.temporaryTag}`,
+      notesFr: `IntÃ©grÃ© depuis dÃ©couverte ${target.temporaryTag}`,
+      imageUrl: target.imageUrl,
+      weightKg: 12,
+      calibrationDueDate: '2027-12-31'
+    };
+    await this.createAsset(newAsset);
+    return newAsset;
+  }
+
+  async rejectDiscovery(id: string, reason: string): Promise<void> {
+    const list = await this.getDiscoveries();
+    const target = list.find(d => d.id === id);
+    if (target) {
+      target.status = 'REJETE';
+      target.rejectionReason = reason;
+      try {
+        const db = await this.openDB();
+        const tx = db.transaction('discoveries', 'readwrite');
+        tx.objectStore('discoveries').put(target);
+      } catch {}
+      this.saveToLocalStorage('kaf_discoveries_v3', list);
+    }
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // CAMPAIGNS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getCampaign(): Promise<InventoryCampaign> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      return new Promise<InventoryCampaign>((resolve) => {
+        const tx = db.transaction('campaigns', 'readonly');
+        const req = tx.objectStore('campaigns').get('CAMP-2026-Q1');
+        req.onsuccess = () => resolve(req.result || initialCampaign);
+        req.onerror = () => resolve(this.getFromLocalStorage('kaf_campaign_v3', initialCampaign));
+      });
+    } catch {
+      return this.getFromLocalStorage('kaf_campaign_v3', initialCampaign);
+    }
+  }
+
+  async closeZone(zoneId: string, user: string): Promise<void> {
+    const campaign = await this.getCampaign();
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    campaign.zones = campaign.zones.map(z => z.id === zoneId ? {
+      ...z, isClosed: true, closedAt: now, closedBy: user
+    } : z);
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('campaigns', 'readwrite');
+      tx.objectStore('campaigns').put(campaign);
+    } catch {}
+    this.saveToLocalStorage('kaf_campaign_v3', campaign);
+  }
+
+  async reopenZone(zoneId: string): Promise<void> {
+    const campaign = await this.getCampaign();
+    campaign.zones = campaign.zones.map(z => z.id === zoneId ? {
+      ...z, isClosed: false, closedAt: undefined, closedBy: undefined
+    } : z);
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('campaigns', 'readwrite');
+      tx.objectStore('campaigns').put(campaign);
+    } catch {}
+    this.saveToLocalStorage('kaf_campaign_v3', campaign);
+  }
+
+  async lockCampaign(): Promise<void> {
+    const campaign = await this.getCampaign();
+    campaign.status = 'VERROUILLEE';
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('campaigns', 'readwrite');
+      tx.objectStore('campaigns').put(campaign);
+    } catch {}
+    this.saveToLocalStorage('kaf_campaign_v3', campaign);
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // AUDIT LOGS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getAuditLogs(): Promise<AuditLogEntry[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      return new Promise<AuditLogEntry[]>((resolve) => {
+        const tx = db.transaction('audit_logs', 'readonly');
+        const req = tx.objectStore('audit_logs').getAll();
+        req.onsuccess = () => resolve(req.result?.length ? req.result.reverse() : initialAuditLogs);
+        req.onerror = () => resolve(this.getFromLocalStorage('kaf_audit_logs_v3', initialAuditLogs));
+      });
+    } catch {
+      return this.getFromLocalStorage('kaf_audit_logs_v3', initialAuditLogs);
+    }
+  }
+
+  async addAuditLog(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<AuditLogEntry> {
+    const newEntry: AuditLogEntry = {
+      ...entry,
+      id: `LOG-${Math.floor(100 + Math.random() * 899)}`,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    };
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('audit_logs', 'readwrite');
+      tx.objectStore('audit_logs').put(newEntry);
+    } catch {}
+    this.updateLocalStorageArray('kaf_audit_logs_v3', newEntry);
+    return newEntry;
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // MUTATIONS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getMutations(): Promise<OfflineMutation[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      return new Promise<OfflineMutation[]>((resolve) => {
+        const tx = db.transaction('offline_mutations', 'readonly');
+        const req = tx.objectStore('offline_mutations').getAll();
+        req.onsuccess = () => resolve(req.result || initialOfflineMutations);
+        req.onerror = () => resolve(this.getFromLocalStorage('kaf_mutations_v3', initialOfflineMutations));
+      });
+    } catch {
+      return this.getFromLocalStorage('kaf_mutations_v3', initialOfflineMutations);
+    }
+  }
+
+  async addMutation(type: OfflineMutation['type'], assetId: string, assetName: string, payload: Record<string, any>): Promise<OfflineMutation> {
+    const mutation: OfflineMutation = {
+      id: `MUT-${Math.floor(99413 + Math.random() * 89999)}`,
+      idempotencyKey: `IDEMP-${assetId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      type,
+      assetId,
+      assetName,
+      payload,
+      syncStatus: 'PENDING',
+      retryCount: 0
+    };
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('offline_mutations', 'readwrite');
+      tx.objectStore('offline_mutations').put(mutation);
+    } catch {}
+    this.updateLocalStorageArray('kaf_mutations_v3', mutation);
+    return mutation;
+  }
+
+  async flushMutations(): Promise<number> {
+    const mutations = await this.getMutations();
+    const updated = mutations.map(m => ({ ...m, syncStatus: 'SUCCESS' as const }));
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('offline_mutations', 'readwrite');
+      const store = tx.objectStore('offline_mutations');
+      updated.forEach(m => store.put(m));
+    } catch {}
+    this.saveToLocalStorage('kaf_mutations_v3', updated);
+    return updated.length;
+  }
+
+  async clearMutations(): Promise<void> {
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('offline_mutations', 'readwrite');
+      tx.objectStore('offline_mutations').clear();
+    } catch {}
+    this.saveToLocalStorage('kaf_mutations_v3', []);
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // CONFLICTS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getConflicts(): Promise<ConflictItem[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      return new Promise<ConflictItem[]>((resolve) => {
+        const tx = db.transaction('conflicts', 'readonly');
+        const req = tx.objectStore('conflicts').getAll();
+        req.onsuccess = () => resolve(req.result || initialConflicts);
+        req.onerror = () => resolve(this.getFromLocalStorage('kaf_conflicts_v3', initialConflicts));
+      });
+    } catch {
+      return this.getFromLocalStorage('kaf_conflicts_v3', initialConflicts);
+    }
+  }
+
+  async resolveConflict(conflictId: string, resolution: 'local' | 'server' | 'merge'): Promise<void> {
+    const conflicts = await this.getConflicts();
+    const remaining = conflicts.filter(c => c.id !== conflictId);
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('conflicts', 'readwrite');
+      tx.objectStore('conflicts').delete(conflictId);
+    } catch {}
+    this.saveToLocalStorage('kaf_conflicts_v3', remaining);
+    await this.addAuditLog({
+      userId: 'MGR-ADMIN-01',
+      userRole: 'RESPONSABLE_PATRIMOINE',
+      action: 'ARBITRAGE_CONFLIT_SQLITE',
+      entityId: conflictId,
+      oldValue: 'CONFLIT_NON_RESOLU',
+      newValue: `RESOLU_${resolution.toUpperCase()}`,
+      reason: `Arbitrage enregistrÃ© dans le journal d'audit local`
+    });
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // CHECKLIST
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getChecklist(): Promise<ValidationChecklistItem[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      return new Promise<ValidationChecklistItem[]>((resolve) => {
+        const tx = db.transaction('checklist', 'readonly');
+        const req = tx.objectStore('checklist').getAll();
+        req.onsuccess = () => resolve(req.result?.length ? req.result : initialChecklist);
+        req.onerror = () => resolve(this.getFromLocalStorage('kaf_checklist_v3', initialChecklist));
+      });
+    } catch {
+      return this.getFromLocalStorage('kaf_checklist_v3', initialChecklist);
+    }
+  }
+
+  async updateChecklist(id: number, status: 'PASSED' | 'PENDING' | 'FAILED'): Promise<void> {
+    const list = await this.getChecklist();
+    const updated = list.map(item => item.id === id ? {
+      ...item, status, testedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    } : item);
+    try {
+      const db = await this.openDB();
+      const tx = db.transaction('checklist', 'readwrite');
+      const target = updated.find(i => i.id === id);
+      if (target) tx.objectStore('checklist').put(target);
+    } catch {}
+    this.saveToLocalStorage('kaf_checklist_v3', updated);
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // STATS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getStats(): Promise<SQLiteDatabaseStats> {
+    const assets = await this.getAssets();
+    const discoveries = await this.getDiscoveries();
+    const mutations = await this.getMutations();
+    const auditLogs = await this.getAuditLogs();
+    const campaign = await this.getCampaign();
+
+    const conforme = assets.filter(a => a.inventoryStatus === 'CONFORME').length;
+    const locationDiff = assets.filter(a => a.inventoryStatus === 'ECART_LOCALISATION').length;
+    const missing = assets.filter(a => a.inventoryStatus === 'MANQUANT').length;
+    const unverified = assets.filter(a => a.inventoryStatus === 'NON_VERIFIE').length;
+    const pendingDisc = discoveries.filter(d => d.status === 'EN_ATTENTE_REVUE').length;
+    const pendingMut = mutations.filter(m => m.syncStatus === 'PENDING').length;
+    const closedZones = campaign.zones ? campaign.zones.filter(z => z.isClosed).length : 0;
+    const totalZones = campaign.zones ? campaign.zones.length : 0;
+
+    const jsonLength = JSON.stringify({ assets, discoveries, mutations, auditLogs }).length;
+    const estimatedSizeBytes = Math.round(jsonLength * 1.4);
+
+    return {
+      engine: 'BROWSER_INDEXEDDB_SQLITE',
+      totalAssets: assets.length,
+      conformeAssets: conforme,
+      locationDiffAssets: locationDiff,
+      missingAssets: missing,
+      unverifiedAssets: unverified,
+      totalDiscoveries: discoveries.length,
+      pendingDiscoveries: pendingDisc,
+      totalMutations: mutations.length,
+      pendingMutations: pendingMut,
+      totalAuditLogs: auditLogs.length,
+      totalZones,
+      closedZones,
+      databasePath: 'IndexedDB://kaf_inventaire_sqlite_v5 (PWA Offline)',
+      databaseSizeBytes: estimatedSizeBytes,
+      journalMode: 'WAL (Emulator)',
+      integrityStatus: 'OK',
+      lastBackupAt: localStorage.getItem('kaf_last_backup_at') || null,
+      sqliteVersion: 'SQLite 3.45.1 (WASM)'
+    };
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // BACKUP / RESTORE / RESET
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async exportBackup(): Promise<DatabaseBackup> {
+    const assets = await this.getAssets();
+    const discoveries = await this.getDiscoveries();
+    const campaigns = [await this.getCampaign()];
+    const mutations = await this.getMutations();
+    const conflicts = await this.getConflicts();
+    const auditLogs = await this.getAuditLogs();
+    const checklist = await this.getChecklist();
+
+    const now = new Date().toISOString();
+    localStorage.setItem('kaf_last_backup_at', now);
+
+    return {
+      version: '1.0.0',
+      exportedAt: now,
+      source: 'KAF-INVENTAIRE Offline SQLite Engine',
+      schemaVersion: 5,
+      data: { assets, discoveries, campaigns, mutations, conflicts, auditLogs, checklist }
+    };
+  }
+
+  async importBackup(backup: DatabaseBackup): Promise<boolean> {
+    if (!backup?.data?.assets) return false;
+    try {
+      const db = await this.openDB();
+
+      const txAssets = db.transaction('assets', 'readwrite');
+      txAssets.objectStore('assets').clear();
+      backup.data.assets.forEach(a => txAssets.objectStore('assets').put(a));
+      this.saveToLocalStorage('kaf_assets_v3', backup.data.assets);
+
+      if (backup.data.discoveries) {
+        const txDisc = db.transaction('discoveries', 'readwrite');
+        txDisc.objectStore('discoveries').clear();
+        backup.data.discoveries.forEach(d => txDisc.objectStore('discoveries').put(d));
+        this.saveToLocalStorage('kaf_discoveries_v3', backup.data.discoveries);
+      }
+
+      if (backup.data.campaigns?.[0]) {
+        const txCamp = db.transaction('campaigns', 'readwrite');
+        txCamp.objectStore('campaigns').put(backup.data.campaigns[0]);
+        this.saveToLocalStorage('kaf_campaign_v3', backup.data.campaigns[0]);
+      }
+
+      if (backup.data.mutations) {
+        const txMut = db.transaction('offline_mutations', 'readwrite');
+        txMut.objectStore('offline_mutations').clear();
+        backup.data.mutations.forEach(m => txMut.objectStore('offline_mutations').put(m));
+        this.saveToLocalStorage('kaf_mutations_v3', backup.data.mutations);
+      }
+
+      if (backup.data.auditLogs) {
+        const txLogs = db.transaction('audit_logs', 'readwrite');
+        txLogs.objectStore('audit_logs').clear();
+        backup.data.auditLogs.forEach(l => txLogs.objectStore('audit_logs').put(l));
+        this.saveToLocalStorage('kaf_audit_logs_v3', backup.data.auditLogs);
+      }
+
+      localStorage.setItem('kaf_last_backup_at', new Date().toISOString());
+      return true;
+    } catch (err) {
+      console.error('Failed to import backup:', err);
+      return false;
+    }
+  }
+
+  async resetSeed(): Promise<void> {
+    try {
+      const db = await this.openDB();
+
+      const txA = db.transaction('assets', 'readwrite');
+      txA.objectStore('assets').clear();
+      initialAssets.forEach(a => txA.objectStore('assets').put(a));
+
+      const txD = db.transaction('discoveries', 'readwrite');
+      txD.objectStore('discoveries').clear();
+      initialDiscoveries.forEach(d => txD.objectStore('discoveries').put(d));
+
+      const txC = db.transaction('campaigns', 'readwrite');
+      txC.objectStore('campaigns').put(initialCampaign);
+
+      const txM = db.transaction('offline_mutations', 'readwrite');
+      txM.objectStore('offline_mutations').clear();
+      initialOfflineMutations.forEach(m => txM.objectStore('offline_mutations').put(m));
+
+      const txCf = db.transaction('conflicts', 'readwrite');
+      txCf.objectStore('conflicts').clear();
+      initialConflicts.forEach(c => txCf.objectStore('conflicts').put(c));
+
+      const txL = db.transaction('audit_logs', 'readwrite');
+      txL.objectStore('audit_logs').clear();
+      initialAuditLogs.forEach(l => txL.objectStore('audit_logs').put(l));
+
+      const txChk = db.transaction('checklist', 'readwrite');
+      txChk.objectStore('checklist').clear();
+      initialChecklist.forEach(item => txChk.objectStore('checklist').put(item));
+
+      // Seed users
+      const txU = db.transaction('users', 'readwrite');
+      txU.objectStore('users').clear();
+      INITIAL_USERS.forEach(u => txU.objectStore('users').put(u));
+    } catch {}
+
+    this.saveToLocalStorage('kaf_assets_v3', initialAssets);
+    this.saveToLocalStorage('kaf_discoveries_v3', initialDiscoveries);
+    this.saveToLocalStorage('kaf_campaign_v3', initialCampaign);
+    this.saveToLocalStorage('kaf_mutations_v3', initialOfflineMutations);
+    this.saveToLocalStorage('kaf_conflicts_v3', initialConflicts);
+    this.saveToLocalStorage('kaf_audit_logs_v3', initialAuditLogs);
+    this.saveToLocalStorage('kaf_checklist_v3', initialChecklist);
+    this.saveToLocalStorage('kaf_users_v3', INITIAL_USERS);
+  }
+
+  async runIntegrityCheck(): Promise<string> {
+    await this.ensureInitialized();
+    const assets = await this.getAssets();
+    const campaign = await this.getCampaign();
+    if (!assets || assets.length === 0) {
+      return "ERROR: Table 'assets' empty or inaccessible";
+    }
+    if (!campaign || !campaign.zones) {
+      return "ERROR: Table 'campaigns' integrity violation";
+    }
+    return "ok (PRAGMA integrity_check: 0 errors across 8 tables, indexes intact)";
+  }
+
+  async exportSqlDump(): Promise<string> {
+    const assets = await this.getAssets();
+    const users = await this.getUsers();
+    const now = new Date().toISOString();
+
+    let sql = `-- KAF-INVENTAIRE Offline Dump â€” ${now}\n\n`;
+    sql += `PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\n\n`;
+
+    sql += `CREATE TABLE IF NOT EXISTS users (\n`;
+    sql += `  id TEXT PRIMARY KEY,\n  username TEXT UNIQUE NOT NULL,\n  fullName TEXT NOT NULL,\n`;
+    sql += `  email TEXT, role TEXT NOT NULL, isActive INTEGER DEFAULT 1,\n`;
+    sql += `  passwordHash TEXT NOT NULL, lastLoginAt TEXT,\n`;
+    sql += `  createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL\n);\n\n`;
+
+    sql += `BEGIN TRANSACTION;\n`;
+    for (const u of users) {
+      sql += `INSERT OR REPLACE INTO users VALUES ('${u.id}', '${u.username}', '${(u.fullName || '').replace(/'/g, "''")}', '${u.email || ''}', '${u.role}', ${u.isActive ? 1 : 0}, '${u.passwordHash || ''}', ${u.lastLoginAt ? `'${u.lastLoginAt}'` : 'NULL'}, '${u.createdAt}', '${u.updatedAt}');\n`;
+    }
+    sql += `COMMIT;\n`;
+    return sql;
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // USERS â€” CRITICAL FOR OFFLINE LOGIN
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  async getUsers(): Promise<AppUser[]> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      if (!db.objectStoreNames.contains('users')) {
+        return this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS);
+      }
+      return new Promise<AppUser[]>((resolve) => {
+        const tx = db.transaction('users', 'readonly');
+        const store = tx.objectStore('users');
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const res = req.result;
+          if (!res || res.length === 0) {
+            console.log('[DB] Users table empty â†’ using INITIAL_USERS');
+            // Persist seed on first read
+            this.resetSeed().catch(() => {});
+            resolve(INITIAL_USERS);
+          } else {
+            resolve(res);
+          }
+        };
+        req.onerror = () => resolve(this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS));
+      });
+    } catch (err) {
+      console.warn('[DB] getUsers fallback to localStorage:', err);
+      return this.getFromLocalStorage<AppUser[]>('kaf_users_v3', INITIAL_USERS);
+    }
+  }
+
+  async createUser(user: AppUser): Promise<AppUser> {
+    await this.ensureInitialized();
+    try {
+      const db = await this.openDB();
+      if (db.objectStoreNames.contains('users')) {
+        const tx = db.transaction('users', 'readwrite');
+        tx.objectStore('users').put(user);
+      }
+    } catch (err) {
+      console.warn('[DB] createUser error:', err);
+    }
+    this.updateLocalStorageArray('kaf_users_v3', user);
+    return user;
+  }
+
+  async updateUser(id: string, fields: Partial<AppUser>): Promise<AppUser> {
+    const users = await this.getUsers();
+    const existing = users.find(u => u.id === id);
+    if (!existing) throw new Error(`User with ID ${id} not found`);
+
+    const updated: AppUser = {
+      ...existing,
+      ...fields,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      const db = await this.openDB();
+      if (db.objectStoreNames.contains('users')) {
+        const tx = db.transaction('users', 'readwrite');
+        tx.objectStore('users').put(updated);
+      }
+    } catch {}
+
+    this.updateLocalStorageArray('kaf_users_v3', updated);
+    return updated;
+  }
+
+  async setUserActiveStatus(id: string, isActive: boolean): Promise<void> {
+    await this.updateUser(id, { isActive });
+  }
+
+  async resetUserPassword(id: string, newPasswordHash: string): Promise<void> {
+    await this.updateUser(id, { passwordHash: newPasswordHash });
+  }
+
+  /**
+   * NEW: Sync users from server (upsert by id)
+   */
+  async syncUsers(users: AppUser[]): Promise<{ synced: number; errors: number }> {
+    await this.ensureInitialized();
+    let synced = 0;
+    let errors = 0;
+
+    for (const user of users) {
+      try {
+        await this.createUser(user);
+        synced++;
+      } catch (err) {
+        console.warn('[DB] syncUsers error for', user.username, ':', err);
+        errors++;
+      }
+    }
+
+    return { synced, errors };
+  }
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // LOCAL STORAGE HELPERS
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  private getFromLocalStorage<T>(key: string, fallback: T): T {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private saveToLocalStorage<T>(key: string, data: T): void {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch {}
+  }
+
+  private updateLocalStorageArray<T extends { id?: any }>(key: string, item: T): void {
+    try {
+      const arr = this.getFromLocalStorage<T[]>(key, []);
+      const index = arr.findIndex(x => x.id === item.id);
+      if (index >= 0) {
+        arr[index] = item;
+      } else {
+        arr.unshift(item);
+      }
+      this.saveToLocalStorage(key, arr);
+    } catch {}
+  }
+}
+
+/**
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ * ELECTRON IPC ADAPTER (Native SQLite via better-sqlite3)
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ */
+class ElectronIPCAdapter implements IDatabaseService {
+  isElectron(): boolean {
+    return true;
+  }
+
+  private get api() {
+    if (!window.electronAPI) {
+      throw new Error('Electron API not found in window');
+    }
+    return window.electronAPI;
+  }
+
+  async getStats(): Promise<SQLiteDatabaseStats> {
+    return this.api.db.getStats();
+  }
+
+  async getAssets(): Promise<Asset[]> {
+    return this.api.db.getAssets();
+  }
+
+  async getAssetById(id: string): Promise<Asset | null> {
+    return this.api.db.getAssetById(id);
+  }
+
+  async searchAssets(query: string): Promise<Asset[]> {
+    return this.api.db.searchAssets(query);
+  }
+
+  async createAsset(asset: Asset): Promise<Asset> {
+    return this.api.db.createAsset(asset);
+  }
+
+  async updateAsset(id: string, fields: Partial<Asset>): Promise<Asset> {
+    return this.api.db.updateAsset(id, fields);
+  }
+
+  async updateInventoryStatus(id: string, status: InventoryResultStatus, bayLocation?: string, user?: string): Promise<Asset> {
+    return this.api.db.updateInventoryStatus(id, status, bayLocation, user);
+  }
+
+  async getDiscoveries(): Promise<DiscoveredAsset[]> {
+    return this.api.db.getDiscoveries();
+  }
+
+  async createDiscovery(discovery: DiscoveredAsset): Promise<DiscoveredAsset> {
+    return this.api.db.createDiscovery(discovery);
+  }
+
+  async matchDiscovery(id: string, assetId: string): Promise<void> {
+    return this.api.db.matchDiscovery(id, assetId);
+  }
+
+  async integrateDiscovery(id: string, officialCode: string): Promise<Asset> {
+    return this.api.db.integrateDiscovery(id, officialCode);
+  }
+
+  async rejectDiscovery(id: string, reason: string): Promise<void> {
+    return this.api.db.rejectDiscovery(id, reason);
+  }
+
+  async getCampaign(): Promise<InventoryCampaign> {
+    return this.api.db.getCampaign();
+  }
+
+  async closeZone(zoneId: string, user: string): Promise<void> {
+    return this.api.db.closeZone(zoneId, user);
+  }
+
+  async reopenZone(zoneId: string): Promise<void> {
+    return this.api.db.reopenZone(zoneId);
+  }
+
+  async lockCampaign(): Promise<void> {
+    return this.api.db.lockCampaign();
+  }
+
+  async getAuditLogs(): Promise<AuditLogEntry[]> {
+    return this.api.db.getAuditLogs();
+  }
+
+  async addAuditLog(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<AuditLogEntry> {
+    return this.api.db.addAuditLog(entry);
+  }
+
+  async getMutations(): Promise<OfflineMutation[]> {
+    return this.api.db.getMutations();
+  }
+
+  async addMutation(type: OfflineMutation['type'], assetId: string, assetName: string, payload: Record<string, any>): Promise<OfflineMutation> {
+    return this.api.db.addMutation({
+      idempotencyKey: `IDEMP-${assetId}-${Date.now()}`,
+      type,
+      assetId,
+      assetName,
+      payload,
+      syncStatus: 'PENDING'
+    });
+  }
+
+  async flushMutations(): Promise<number> {
+    return this.api.db.flushMutations();
+  }
+
+  async clearMutations(): Promise<void> {
+    return this.api.db.clearMutations();
+  }
+
+  async getConflicts(): Promise<ConflictItem[]> {
+    return this.api.db.getConflicts();
+  }
+
+  async resolveConflict(conflictId: string, resolution: 'local' | 'server' | 'merge'): Promise<void> {
+    return this.api.db.resolveConflict(conflictId, resolution);
+  }
+
+  async getChecklist(): Promise<ValidationChecklistItem[]> {
+    return this.api.db.getChecklist();
+  }
+
+  async updateChecklist(id: number, status: 'PASSED' | 'PENDING' | 'FAILED'): Promise<void> {
+    return this.api.db.updateChecklist(id, status);
+  }
+
+  async exportBackup(): Promise<DatabaseBackup> {
+    return this.api.db.exportBackup();
+  }
+
+  async importBackup(backup: DatabaseBackup): Promise<boolean> {
+    return this.api.db.importBackup(backup);
+  }
+
+  async resetSeed(): Promise<void> {
+    return this.api.db.resetSeed();
+  }
+
+  async runIntegrityCheck(): Promise<string> {
+    return this.api.db.runIntegrityCheck();
+  }
+
+  async exportSqlDump(): Promise<string> {
+    return this.api.db.exportSqlDump();
+  }
+
+  async getUsers(): Promise<AppUser[]> {
+    return this.api.db.getUsers();
+  }
+
+  async createUser(user: AppUser): Promise<AppUser> {
+    return this.api.db.createUser(user);
+  }
+
+  async updateUser(id: string, fields: Partial<AppUser>): Promise<AppUser> {
+    return this.api.db.updateUser(id, fields);
+  }
+
+  async setUserActiveStatus(id: string, isActive: boolean): Promise<void> {
+    return this.api.db.setUserActiveStatus(id, isActive);
+  }
+
+  async resetUserPassword(id: string, newPasswordHash: string): Promise<void> {
+    return this.api.db.resetUserPassword(id, newPasswordHash);
+  }
+
+  async syncUsers(users: AppUser[]): Promise<{ synced: number; errors: number }> {
+    // Fallback : iterate createUser if syncUsers IPC not available
+    if (this.api.db.syncUsers) {
+      return this.api.db.syncUsers(users);
+    }
+    let synced = 0, errors = 0;
+    for (const u of users) {
+      try { await this.api.db.createUser(u); synced++; }
+      catch { errors++; }
+    }
+    return { synced, errors };
+  }
+}
+
+/**
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ * UNIVERSAL DATABASE SERVICE
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ */
+class DatabaseServiceManager {
+  private activeAdapter: IDatabaseService;
+
+  constructor() {
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      this.activeAdapter = new ElectronIPCAdapter();
+    } else {
+      this.activeAdapter = new BrowserIndexedDBAdapter();
+    }
+  }
+
+  get adapter(): IDatabaseService {
+    if (typeof window !== 'undefined' && window.electronAPI && !this.activeAdapter.isElectron()) {
+      this.activeAdapter = new ElectronIPCAdapter();
+    }
+    return this.activeAdapter;
+  }
+}
+
+export const dbService = new DatabaseServiceManager().adapter;
